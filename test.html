@@ -1,9 +1,8 @@
-
 <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8" />
-    <title>Влияние ЭМ полей на человека</title>
+    <title>Симуляционная модель ЭМ воздействия полей на человека (FBX)</title>
     <style>
         * { box-sizing: border-box; }
 
@@ -129,20 +128,21 @@
             inset: 0;
         }
 
+        /* легенда увеличена примерно в 2 раза */
         #legend-svg {
             position: absolute;
-            right: 18px;
-            top: 64px;
-            width: 42px;
-            height: 220px;
+            right: 28px;
+            top: 60px;
+            width: 84px;
+            height: 440px;
             pointer-events: none;
         }
 
         #legend-label {
             position: absolute;
-            right: 70px;
-            top: 64px;
-            font-size: 11px;
+            right: 120px;
+            top: 60px;
+            font-size: 12px;
             color: #cbd5f5;
             writing-mode: vertical-rl;
             text-orientation: mixed;
@@ -221,7 +221,7 @@
         <aside id="sidebar">
             <div class="panel-block">
                 <div class="panel-title">Режим моделирования</div>
-                <label><input type="radio" name="mode" value="microwave" checked> ЭМИ (микроволны, SAR)</label>
+                <label><input type="radio" name="mode" value="microwave" checked> ЭМИ облучение, SAR</label>
                 <label><input type="radio" name="mode" value="elf"> ELF-поля (низкие частоты)</label>
                 <label><input type="radio" name="mode" value="infrasound"> Инфразвук в помещении</label>
                 <label><input type="radio" name="mode" value="brain"> Беспроводное считывание мозга</label>
@@ -230,7 +230,7 @@
 
             <div class="panel-block">
                 <div class="panel-title">Модель человека</div>
-                <label style="margin-bottom:4px;">Выбор FBX / фантом:</label>
+                <label style="margin-bottom:4px;">Выбор FBX / фантома:</label>
                 <!--
                     Имена файлов:
                     - character.fbx
@@ -240,7 +240,15 @@
                 <select id="humanModel" class="select-control">
                     <option value="character.fbx" selected>Модель 1: character.fbx</option>
                     <option value="Ch36_nonPBR.fbx">Модель 2: Ch36_nonPBR.fbx</option>
-                    <option value="primitive">Упрощённый фантом (wire)</option>
+                </select>
+            </div>
+
+            <div class="panel-block">
+                <div class="panel-title">Цветовая гамма полей</div>
+                <select id="fieldPalette" class="select-control">
+                    <option value="blue" selected>Холодная (сине-голубая)</option>
+                    <option value="green">Биомед (зелёно-бирюзовая)</option>
+                    <option value="red">Тепловая (жёлто-красная)</option>
                 </select>
             </div>
 
@@ -269,7 +277,7 @@
 
             <div class="panel-block">
                 <div class="panel-title">Примечания</div>
-                <p>HTML+FBX нужно открывать по HTTP (локальный сервер, GitHub Pages и т.п.). При <code>file://</code> браузер может блокировать загрузку моделей и модулей.</p>
+                <!--<p>HTML+FBX нужно открывать по HTTP (локальный сервер, GitHub Pages и т.п.). При <code>file://</code> браузер может блокировать загрузку моделей и модулей.</p>-->
             </div>
         </aside>
 
@@ -327,7 +335,7 @@
     </div>
 </div>
 
-<!-- Импорт-карта: говорим, что модуль "three" живёт по этому URL -->
+<!-- импорт-карта: подключаем three как модуль -->
 <script type="importmap">
 {
   "imports": {
@@ -336,7 +344,6 @@
 }
 </script>
 
-<!-- Весь JS как ES-модуль -->
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'https://unpkg.com/three@0.161.0/examples/jsm/controls/OrbitControls.js';
@@ -380,69 +387,17 @@ scene.add(dirLight);
 const humanGroup = new THREE.Group();
 scene.add(humanGroup);
 
-// Примитивный фантом (fallback)
-function createPrimitiveHuman() {
-    const group = new THREE.Group();
-    const wireMaterial = new THREE.MeshPhongMaterial({
-        color: 0xf97316,
-        wireframe: true,
-        transparent: true,
-        opacity: 0.88
-    });
-
-    const torso = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.42, 0.45, 1.4, 20),
-        wireMaterial
-    );
-    torso.position.y = 1.35;
-    group.add(torso);
-
-    const head = new THREE.Mesh(
-        new THREE.SphereGeometry(0.26, 18, 18),
-        wireMaterial
-    );
-    head.position.y = 2.3;
-    group.add(head);
-
-    function createLeg(xOffset) {
-        const leg = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.12, 0.14, 0.9, 14),
-            wireMaterial
-        );
-        leg.position.set(xOffset, 0.45, 0);
-        return leg;
-    }
-    group.add(createLeg(-0.18));
-    group.add(createLeg(0.18));
-
-    function createArm(xOffset) {
-        const arm = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.09, 0.09, 0.9, 14),
-            wireMaterial
-        );
-        arm.position.set(xOffset, 1.25, 0);
-        arm.rotation.z = (xOffset > 0 ? -1 : 1) * Math.PI / 16;
-        return arm;
-    }
-    group.add(createArm(-0.65));
-    group.add(createArm(0.65));
-
-    return group;
-}
-
-const primitiveHuman = createPrimitiveHuman();
-humanGroup.add(primitiveHuman);
-
 const fbxLoader = new FBXLoader();
 let currentFBX = null;
 
+// Нормализация FBX под сцену
 function normalizeAndAttachFBX(object) {
     object.traverse((child) => {
         if (child.isMesh) {
             child.castShadow = true;
             child.receiveShadow = true;
             if (child.material && child.material.color) {
-                child.material.color.multiplyScalar(0.9);
+                child.material.color.multiplyScalar(0.95);
             }
         }
     });
@@ -464,7 +419,6 @@ function normalizeAndAttachFBX(object) {
     object.position.sub(center2);
     object.position.y += targetHeight / 2.0;
 
-    primitiveHuman.visible = false;
     if (currentFBX) {
         humanGroup.remove(currentFBX);
     }
@@ -480,27 +434,17 @@ function loadFBXModel(path) {
             normalizeAndAttachFBX(object);
             console.log('FBX загружен:', path);
         },
-        undefined,
+        (xhr) => {
+            // если нужно — раскомментировать лог прогресса
+            // if (xhr.total) console.log(`FBX прогресс ${path}: ${(xhr.loaded / xhr.total * 100).toFixed(1)}%`);
+        },
         (error) => {
             console.error('Ошибка загрузки FBX:', error);
-            if (currentFBX) {
-                humanGroup.remove(currentFBX);
-                currentFBX = null;
-            }
-            primitiveHuman.visible = true;
         }
     );
 }
 
-function usePrimitiveHuman() {
-    if (currentFBX) {
-        humanGroup.remove(currentFBX);
-        currentFBX = null;
-    }
-    primitiveHuman.visible = true;
-}
-
-// СЕТКА И ОБЛАСТЬ
+// СЕТКА, ОБЛАСТЬ РАСЧЁТА, ОСИ
 const grid = new THREE.GridHelper(10, 20, 0x1f2937, 0x0f172a);
 grid.position.y = 0;
 scene.add(grid);
@@ -518,7 +462,12 @@ const simBox = new THREE.LineSegments(
 simBox.position.y = 1.5;
 scene.add(simBox);
 
-// ГРУППЫ ПОЛЕЙ
+// оси координат XYZ в области расчёта
+const axesHelper = new THREE.AxesHelper(1.8);
+axesHelper.position.set(0, 0.01, 0);
+scene.add(axesHelper);
+
+// Группы полей
 const microwaveGroup  = new THREE.Group();
 const elfGroup        = new THREE.Group();
 const infrasoundGroup = new THREE.Group();
@@ -528,6 +477,8 @@ scene.add(microwaveGroup, elfGroup, infrasoundGroup, brainGroup, comboGroup);
 
 // МИКРОВОЛНЫ
 const microwavePlanes = [];
+let microwavePanel = null;
+
 (function createMicrowave() {
     const planeCount = 8;
     for (let i = 0; i < planeCount; i++) {
@@ -555,6 +506,7 @@ const microwavePlanes = [];
     const panel = new THREE.Mesh(panelGeo, panelMat);
     panel.position.set(2.6, 1.5, 0);
     microwaveGroup.add(panel);
+    microwavePanel = panel;
 })();
 
 // ELF
@@ -703,6 +655,26 @@ let brainBeam;
     comboGroup.userData = { plane: comboPlane, sphere: miniSphere, beam: comboBeam };
 })();
 
+// СКАНИРУЮЩЕЕ ГОЛОГРАФИЧЕСКОЕ ПОЛЕ (вертикальное сканирование по оси Y)
+const scanGroup = new THREE.Group();
+scene.add(scanGroup);
+let scanPlane = null;
+
+(function createScanPlane() {
+    const scanGeo = new THREE.PlaneGeometry(2.4, 2.4, 1, 1);
+    const scanMat = new THREE.MeshBasicMaterial({
+        color: 0x4ade80,
+        transparent: true,
+        opacity: 0.25,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending
+    });
+    scanPlane = new THREE.Mesh(scanGeo, scanMat);
+    scanPlane.rotation.x = -Math.PI / 2; // горизонтальная плоскость, сканирующая по высоте
+    scanPlane.position.set(0, 0.3, 0);
+    scanGroup.add(scanPlane);
+})();
+
 // UI / РЕЖИМЫ
 const freqValue       = document.getElementById('freqValue');
 const powerValue      = document.getElementById('powerValue');
@@ -722,6 +694,9 @@ function setMode(mode) {
     infrasoundGroup.visible = (mode === 'infrasound');
     brainGroup.visible      = (mode === 'brain');
     comboGroup.visible      = (mode === 'combo');
+
+    // зелёное сканирующее поле показываем только там, где ЭМ-воздействие
+    scanGroup.visible = (mode === 'microwave' || mode === 'brain' || mode === 'combo');
 
     switch (mode) {
         case 'microwave':
@@ -795,14 +770,68 @@ document.getElementById('toggle-legend').addEventListener('change', (e) => {
     legendLabel.style.display = visible ? 'block' : 'none';
 });
 
+// Цветовые схемы полей
+const fieldPaletteSelect = document.getElementById('fieldPalette');
+let currentPalette = fieldPaletteSelect ? fieldPaletteSelect.value : 'blue';
+
+function applyFieldPalette(palette) {
+    let microwaveColor, panelColor, scanColor, brainColor;
+
+    switch (palette) {
+        case 'green':
+            microwaveColor = 0x22c55e;
+            panelColor     = 0x16a34a;
+            scanColor      = 0x4ade80;
+            brainColor     = 0x22c55e;
+            break;
+        case 'red':
+            microwaveColor = 0xf97316;
+            panelColor     = 0xf97316;
+            scanColor      = 0xfacc15;
+            brainColor     = 0xf97316;
+            break;
+        default: // blue
+            microwaveColor = 0x38bdf8;
+            panelColor     = 0x0ea5e9;
+            scanColor      = 0x4ade80;
+            brainColor     = 0xa855f7;
+            break;
+    }
+
+    microwavePlanes.forEach((plane) => {
+        plane.material.color.setHex(microwaveColor);
+    });
+
+    if (microwavePanel) {
+        microwavePanel.material.color.setHex(panelColor);
+        if (microwavePanel.material.emissive) {
+            microwavePanel.material.emissive.setHex(panelColor);
+        }
+    }
+
+    if (comboGroup.userData && comboGroup.userData.plane) {
+        comboGroup.userData.plane.material.color.setHex(microwaveColor);
+    }
+
+    if (brainBeam) {
+        brainBeam.material.color.setHex(brainColor);
+    }
+
+    if (scanPlane) {
+        scanPlane.material.color.setHex(scanColor);
+    }
+}
+
+fieldPaletteSelect.addEventListener('change', (e) => {
+    currentPalette = e.target.value;
+    applyFieldPalette(currentPalette);
+});
+
+// выбор модели человека
 const humanModelSelect = document.getElementById('humanModel');
 humanModelSelect.addEventListener('change', (e) => {
     const value = e.target.value;
-    if (value === 'primitive') {
-        usePrimitiveHuman();
-    } else {
-        loadFBXModel(value);
-    }
+    loadFBXModel(value);
 });
 
 // АНИМАЦИЯ
@@ -852,6 +881,15 @@ function animate() {
         data.beam.material.opacity = 0.25 + 0.15 * (0.5 + 0.5 * Math.sin(time * 2.1));
     }
 
+    // вертикальное сканирование по высоте
+    if (scanGroup.visible && scanPlane) {
+        const base = 0.2;
+        const height = 2.8;
+        const s = (Math.sin(t * 0.6) + 1) / 2; // 0..1
+        scanPlane.position.y = base + s * height;
+        scanPlane.material.opacity = 0.15 + 0.15 * Math.abs(Math.cos(t * 0.6));
+    }
+
     controls.update();
     renderer.render(scene, camera);
 }
@@ -869,7 +907,8 @@ window.addEventListener('resize', onWindowResize);
 
 // ИНИЦИАЛИЗАЦИЯ
 setMode('microwave');
-loadFBXModel(humanModelSelect.value); // по умолчанию пробуем загрузить первую FBX
+applyFieldPalette(currentPalette);
+loadFBXModel(humanModelSelect.value);
 </script>
 </body>
 </html>
