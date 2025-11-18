@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8" />
+    <title>Симуляционная модель ЭМ воздействия полей на человека (FBX)</title>
+    <style>
+        * { box-sizing: border-box; }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            width: 100%;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: #040814;
+            color: #e5e7eb;
+        }
+
+        #app {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+        }
+
+        header {
+            height: 42px;
+            display: flex;
+            align-items: center;
+            padding: 0 16px;
+            background: linear-gradient(90deg, #020617, #0b1120);
+            border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+            font-size: 14px;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+
+        header span.logo-dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 999px;
+            background: radial-gradient(circle at 30% 30%, #22d3ee, #0ea5e9);
+            margin-right: 8px;
+        }
+
+        header .title-main {
+            font-weight: 600;
+            margin-right: 12px;
+        }
+
+        header .title-sub {
+            font-size: 12px;
+            opacity: 0.7;
+        }
+
+        #content {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            overflow: hidden;
+        }
+
+        aside#sidebar {
+            background: radial-gradient(circle at top, #020617 0, #020617 40%, #020617 100%);
+            border-right: 1px solid rgba(148, 163, 184, 0.2);
+            padding: 14px 14px 10px 14px;
+            font-size: 13px;
+            overflow-y: auto;
+        }
+
+        .panel-title {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #9ca3af;
+            margin-bottom: 6px;
+        }
+
+        .panel-block {
+            border-radius: 10px;
+            padding: 10px 10px 8px 10px;
+            background: radial-gradient(circle at top left, rgba(15, 23, 42, 0.9), rgba(15, 23, 42, 0.7));
+            border: 1px solid rgba(148, 163, 184, 0.25);
+            margin-bottom: 10px;
+        }
+
+        .panel-block label {
+            display: flex;
+            align-items: center;
+            margin-bottom: 4px;
+            cursor: pointer;
+        }
+
+        .panel-block input[type="radio"],
+        .panel-block input[type="checkbox"] {
+            margin-right: 6px;
+            accent-color: #38bdf8;
+        }
+
+        .panel-block .param-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 2px;
+        }
+
+        .param-name { color: #9ca3af; }
+        .param-value { font-variant-numeric: tabular-nums; }
+
+        .select-control {
+            width: 100%;
+            padding: 4px 6px;
+            border-radius: 8px;
+            border: 1px solid rgba(148,163,184,0.4);
+            background: #020617;
+            color: #e5e7eb;
+            font-size: 12px;
+            outline: none;
+        }
+
+        main#viewport-container {
+            position: relative;
+            background: radial-gradient(circle at top, #020617 0, #020617 25%, #020617 100%);
+        }
+
+        #viewport {
+            position: absolute;
+            inset: 0;
+        }
+
+        /* легенда увеличена примерно в 2 раза */
+        #legend-svg {
+            position: absolute;
+            right: 28px;
+            top: 60px;
+            width: 84px;
+            height: 440px;
+            pointer-events: none;
+        }
+
+        #legend-label {
+            position: absolute;
+            right: 120px;
+            top: 60px;
+            font-size: 12px;
+            color: #cbd5f5;
+            writing-mode: vertical-rl;
+            text-orientation: mixed;
+            opacity: 0.8;
+        }
+
+        #info-panel {
+            position: absolute;
+            left: 16px;
+            bottom: 14px;
+            min-width: 260px;
+            max-width: 420px;
+            padding: 8px 10px;
+            border-radius: 12px;
+            background: rgba(15, 23, 42, 0.86);
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            backdrop-filter: blur(12px);
+            font-size: 12px;
+        }
+
+        #info-panel h2 {
+            margin: 0 0 4px 0;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.09em;
+            color: #9ca3af;
+        }
+
+        #info-panel p { margin: 0 0 2px 0; }
+
+        #info-panel .metrics {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 6px;
+            margin-top: 4px;
+        }
+
+        .metric {
+            padding: 4px 6px;
+            border-radius: 8px;
+            background: radial-gradient(circle at top left, rgba(30, 64, 175, 0.9), rgba(15, 23, 42, 0.95));
+        }
+
+        .metric-label {
+            font-size: 10px;
+            color: #cbd5f5;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 1px;
+        }
+
+        .metric-value { font-variant-numeric: tabular-nums; }
+
+        .metric-unit {
+            font-size: 10px;
+            color: #9ca3af;
+            margin-left: 3px;
+        }
+
+        .small-caption {
+            font-size: 11px;
+            color: #9ca3af;
+            margin-top: 4px;
+        }
+    </style>
+</head>
+<body>
+<div id="app">
+    <header>
+        <span class="logo-dot"></span>
+        <span class="title-main">ЧИСЛЕННАЯ МОДЕЛЬ ВОЗДЕЙСТВИЯ ПОЛЕЙ НА ЧЕЛОВЕКА</span>
+        <!-- <span class="title-sub">FBX-фантом · </span> -->
+    </header>
+
+    <div id="content">
+        <aside id="sidebar">
+            <div class="panel-block">
+                <div class="panel-title">Режим моделирования</div>
+                <label><input type="radio" name="mode" value="microwave" checked> ЭМИ облучение, SAR</label>
+                <label><input type="radio" name="mode" value="elf"> ELF-поля (низкие частоты)</label>
+                <label><input type="radio" name="mode" value="infrasound"> Инфразвук в помещении</label>
+                <label><input type="radio" name="mode" value="brain"> Беспроводное считывание мозга</label>
+                <label><input type="radio" name="mode" value="combo"> Комбинированное воздействие</label>
+            </div>
+
+            <div class="panel-block">
+                <div class="panel-title">Модель человека</div>
+                <label style="margin-bottom:4px;">Выбор FBX / фантома:</label>
+                <!--
+                    Имена файлов:
+                    - character.fbx
+                    - Ch36_nonPBR.fbx
+                    Положи их рядом с этим HTML (или поправь value под свои названия).
+                -->
+                <select id="humanModel" class="select-control">
+                    <option value="character.fbx" selected>Модель 1: character.fbx</option>
+                    <option value="Ch36_nonPBR.fbx">Модель 2: Ch36_nonPBR.fbx</option>
+                </select>
+            </div>
+
+            <div class="panel-block">
+                <div class="panel-title">Цветовая гамма полей</div>
+                <select id="fieldPalette" class="select-control">
+                    <option value="blue" selected>Холодная (сине-голубая)</option>
+                    <option value="green">Биомед (зелёно-бирюзовая)</option>
+                    <option value="red">Тепловая (жёлто-красная)</option>
+                </select>
+            </div>
+
+            <div class="panel-block">
+                <div class="panel-title">Отображение сцены</div>
+                <label><input type="checkbox" id="toggle-grid" checked> Сетка пола</label>
+                <label><input type="checkbox" id="toggle-box" checked> Область расчёта</label>
+                <label><input type="checkbox" id="toggle-legend" checked> Легенда интенсивности</label>
+            </div>
+
+            <div class="panel-block">
+                <div class="panel-title">Параметры источника</div>
+                <div class="param-row">
+                    <span class="param-name">Частота, Гц</span>
+                    <span class="param-value" id="freqValue">3.5e9</span>
+                </div>
+                <div class="param-row">
+                    <span class="param-name">Мощность, Вт</span>
+                    <span class="param-value" id="powerValue">10</span>
+                </div>
+                <div class="param-row">
+                    <span class="param-name">Дистанция, м</span>
+                    <span class="param-value" id="distValue">1.0</span>
+                </div>
+            </div>
+
+            <div class="panel-block">
+                <div class="panel-title">Примечания</div>
+                <!--<p>HTML+FBX нужно открывать по HTTP (локальный сервер, GitHub Pages и т.п.). При <code>file://</code> браузер может блокировать загрузку моделей и модулей.</p>-->
+            </div>
+        </aside>
+
+        <main id="viewport-container">
+            <div id="viewport"></div>
+
+            <div id="legend-label">Интенсивность поля</div>
+            <svg id="legend-svg" viewBox="0 0 40 200">
+                <defs>
+                    <linearGradient id="legendGradient" x1="0" x2="0" y1="1" y2="0">
+                        <stop offset="0%" stop-color="#0f172a"/>
+                        <stop offset="30%" stop-color="#22c55e"/>
+                        <stop offset="60%" stop-color="#eab308"/>
+                        <stop offset="100%" stop-color="#ef4444"/>
+                    </linearGradient>
+                </defs>
+                <rect x="14" y="10" width="12" height="160" fill="url(#legendGradient)" stroke="#cbd5f5" stroke-width="0.5"/>
+                <g font-size="8" fill="#cbd5f5">
+                    <text x="30" y="16" text-anchor="start">макс</text>
+                    <text x="30" y="176" text-anchor="start">мин</text>
+                </g>
+                <g stroke="#cbd5f5" stroke-width="0.5">
+                    <line x1="14" y1="10" x2="10" y2="10" />
+                    <line x1="14" y1="50" x2="10" y2="50" />
+                    <line x1="14" y1="90" x2="10" y2="90" />
+                    <line x1="14" y1="130" x2="10" y2="130" />
+                    <line x1="14" y1="170" x2="10" y2="170" />
+                </g>
+            </svg>
+
+            <div id="info-panel">
+                <h2>Сводка по текущему режиму</h2>
+                <p id="modeDescription">
+                    Микроволновое поле от плоской волны и распределение SAR в теле стоящего человека.
+                </p>
+                <div class="metrics">
+                    <div class="metric">
+                        <div class="metric-label">Пиковый SAR</div>
+                        <div><span class="metric-value" id="metricSar">1.3</span><span class="metric-unit">Вт/кг</span></div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">E-поле</div>
+                        <div><span class="metric-value" id="metricE">45</span><span class="metric-unit">В/м</span></div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">Уровень звука</div>
+                        <div><span class="metric-value" id="metricSound">60</span><span class="metric-unit">дБ</span></div>
+                    </div>
+                </div>
+                <div class="small-caption">
+                    Показатели процедурные и служат только для иллюстрации работы интерфейса.
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+
+<!-- импорт-карта: подключаем three как модуль -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.161.0/build/three.module.js"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'https://unpkg.com/three@0.161.0/examples/jsm/controls/OrbitControls.js';
+import { FBXLoader } from 'https://unpkg.com/three@0.161.0/examples/jsm/loaders/FBXLoader.js';
+
+const container = document.getElementById('viewport');
+
+// СЦЕНА, КАМЕРА, РЕНДЕРЕР
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x020617);
+
+const camera = new THREE.PerspectiveCamera(
+    35,
+    container.clientWidth / container.clientHeight,
+    0.1,
+    100
+);
+camera.position.set(4, 3, 6);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(window.devicePixelRatio || 1);
+renderer.setSize(container.clientWidth, container.clientHeight);
+container.appendChild(renderer.domElement);
+
+// ORBIT CONTROLS
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 1.3, 0);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.update();
+
+// СВЕТ
+const hemiLight = new THREE.HemisphereLight(0x93c5fd, 0x020617, 0.7);
+scene.add(hemiLight);
+
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.7);
+dirLight.position.set(3, 6, 4);
+scene.add(dirLight);
+
+// ГРУППА ДЛЯ ЧЕЛОВЕКА
+const humanGroup = new THREE.Group();
+scene.add(humanGroup);
+
+const fbxLoader = new FBXLoader();
+let currentFBX = null;
+
+// Нормализация FBX под сцену
+function normalizeAndAttachFBX(object) {
+    object.traverse((child) => {
+        if (child.isMesh) {
+            child.castShadow = true;
+            child.receiveShadow = true;
+            if (child.material && child.material.color) {
+                child.material.color.multiplyScalar(0.95);
+            }
+        }
+    });
+
+    const box = new THREE.Box3().setFromObject(object);
+    const size = new THREE.Vector3();
+    const center = new THREE.Vector3();
+    box.getSize(size);
+    box.getCenter(center);
+
+    const targetHeight = 2.0;
+    const scaleFactor = size.y > 0 ? targetHeight / size.y : 1.0;
+    object.scale.setScalar(scaleFactor);
+
+    const box2 = new THREE.Box3().setFromObject(object);
+    const center2 = new THREE.Vector3();
+    box2.getCenter(center2);
+
+    object.position.sub(center2);
+    object.position.y += targetHeight / 2.0;
+
+    if (currentFBX) {
+        humanGroup.remove(currentFBX);
+    }
+    currentFBX = object;
+    humanGroup.add(object);
+}
+
+function loadFBXModel(path) {
+    console.log('Загрузка FBX:', path);
+    fbxLoader.load(
+        path,
+        (object) => {
+            normalizeAndAttachFBX(object);
+            console.log('FBX загружен:', path);
+        },
+        (xhr) => {
+            // если нужно — раскомментировать лог прогресса
+            // if (xhr.total) console.log(`FBX прогресс ${path}: ${(xhr.loaded / xhr.total * 100).toFixed(1)}%`);
+        },
+        (error) => {
+            console.error('Ошибка загрузки FBX:', error);
+        }
+    );
+}
+
+// СЕТКА, ОБЛАСТЬ РАСЧЁТА, ОСИ
+const grid = new THREE.GridHelper(10, 20, 0x1f2937, 0x0f172a);
+grid.position.y = 0;
+scene.add(grid);
+
+const simBoxGeo = new THREE.BoxGeometry(3.5, 3.5, 2.5);
+const simBoxMat = new THREE.LineBasicMaterial({
+    color: 0x4b5563,
+    transparent: true,
+    opacity: 0.6
+});
+const simBox = new THREE.LineSegments(
+    new THREE.EdgesGeometry(simBoxGeo),
+    simBoxMat
+);
+simBox.position.y = 1.5;
+scene.add(simBox);
+
+// оси координат XYZ в области расчёта
+const axesHelper = new THREE.AxesHelper(1.8);
+axesHelper.position.set(0, 0.01, 0);
+scene.add(axesHelper);
+
+// Группы полей
+const microwaveGroup  = new THREE.Group();
+const elfGroup        = new THREE.Group();
+const infrasoundGroup = new THREE.Group();
+const brainGroup      = new THREE.Group();
+const comboGroup      = new THREE.Group();
+scene.add(microwaveGroup, elfGroup, infrasoundGroup, brainGroup, comboGroup);
+
+// МИКРОВОЛНЫ
+const microwavePlanes = [];
+let microwavePanel = null;
+
+(function createMicrowave() {
+    const planeCount = 8;
+    for (let i = 0; i < planeCount; i++) {
+        const planeGeo = new THREE.PlaneGeometry(3.5, 3.3, 1, 40);
+        const planeMat = new THREE.MeshPhongMaterial({
+            color: 0x38bdf8,
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 0.26
+        });
+        const plane = new THREE.Mesh(planeGeo, planeMat);
+        plane.rotation.y = Math.PI / 2;
+        plane.position.set(1.8 - i * 0.45, 1.5, 0);
+        plane.userData.offset = plane.position.x;
+        microwavePlanes.push(plane);
+        microwaveGroup.add(plane);
+    }
+
+    const panelGeo = new THREE.BoxGeometry(0.18, 1.2, 0.7);
+    const panelMat = new THREE.MeshPhongMaterial({
+        color: 0x0ea5e9,
+        emissive: 0x0284c7,
+        emissiveIntensity: 0.7
+    });
+    const panel = new THREE.Mesh(panelGeo, panelMat);
+    panel.position.set(2.6, 1.5, 0);
+    microwaveGroup.add(panel);
+    microwavePanel = panel;
+})();
+
+// ELF
+const elfLines = [];
+(function createElf() {
+    const wireGeo = new THREE.CylinderGeometry(0.05, 0.05, 5, 16);
+    const wireMat = new THREE.MeshPhongMaterial({ color: 0x93c5fd });
+    const wire = new THREE.Mesh(wireGeo, wireMat);
+    wire.position.set(-2.3, 2.2, 0);
+    elfGroup.add(wire);
+
+    const ringCount = 9;
+    for (let i = 0; i < ringCount; i++) {
+        const radius = 0.4 + i * 0.18;
+        const ringGeo = new THREE.TorusGeometry(radius, 0.015, 8, 72);
+        const ringMat = new THREE.MeshBasicMaterial({
+            color: 0x22c55e,
+            transparent: true,
+            opacity: 0.5
+        });
+        const ring = new THREE.Mesh(ringGeo, ringMat);
+        ring.rotation.x = Math.PI / 2;
+        ring.position.set(-2.3, 1.0, 0);
+        ring.userData.baseRadius = radius;
+        elfLines.push(ring);
+        elfGroup.add(ring);
+    }
+})();
+
+// ИНФРАЗВУК
+const infrasoundSpheres = [];
+(function createInfrasound() {
+    const srcGeo = new THREE.ConeGeometry(0.25, 0.5, 18);
+    const srcMat = new THREE.MeshPhongMaterial({
+        color: 0xf97316,
+        emissive: 0x9a3412,
+        emissiveIntensity: 0.9
+    });
+    const src = new THREE.Mesh(srcGeo, srcMat);
+    src.position.set(-1.8, 0.25, -1.5);
+    src.rotation.x = -Math.PI / 2;
+    infrasoundGroup.add(src);
+
+    const sphereCount = 4;
+    for (let i = 0; i < sphereCount; i++) {
+        const sGeo = new THREE.SphereGeometry(0.6 + i * 0.5, 32, 24);
+        const sMat = new THREE.MeshPhongMaterial({
+            color: 0x60a5fa,
+            wireframe: true,
+            transparent: true,
+            opacity: 0.28
+        });
+        const s = new THREE.Mesh(sGeo, sMat);
+        s.position.set(-1.8, 1.0, -1.5);
+        s.userData.phaseShift = i * 0.6;
+        infrasoundSpheres.push(s);
+        infrasoundGroup.add(s);
+    }
+})();
+
+// БЕСПРОВОДНОЕ СЧИТЫВАНИЕ МОЗГА
+let brainBeam;
+(function createBrain() {
+    const radarGeo = new THREE.BoxGeometry(0.5, 0.3, 0.5);
+    const radarMat = new THREE.MeshPhongMaterial({
+        color: 0x22d3ee,
+        emissive: 0x0891b2,
+        emissiveIntensity: 0.8
+    });
+    const radar = new THREE.Mesh(radarGeo, radarMat);
+    radar.position.set(1.6, 1.7, 0.6);
+    brainGroup.add(radar);
+
+    const screenGeo = new THREE.PlaneGeometry(0.4, 0.22);
+    const screenMat = new THREE.MeshBasicMaterial({
+        color: 0x0f172a,
+        transparent: true,
+        opacity: 0.9
+    });
+    const screen = new THREE.Mesh(screenGeo, screenMat);
+    screen.position.set(1.6, 2.05, 0.6);
+    screen.rotation.y = -Math.PI / 3;
+    brainGroup.add(screen);
+
+    const beamGeo = new THREE.CylinderGeometry(0.05, 0.2, 2.2, 32, 1, true);
+    const beamMat = new THREE.MeshPhongMaterial({
+        color: 0xa855f7,
+        transparent: true,
+        opacity: 0.45,
+        side: THREE.DoubleSide
+    });
+    brainBeam = new THREE.Mesh(beamGeo, beamMat);
+    brainBeam.position.set(0.8, 1.9, 0.3);
+    brainBeam.rotation.z = Math.PI / 2.8;
+    brainGroup.add(brainBeam);
+
+    const brainGeo = new THREE.SphereGeometry(0.18, 18, 18);
+    const brainMat = new THREE.MeshPhongMaterial({
+        color: 0x22c55e,
+        transparent: true,
+        opacity: 0.9
+    });
+    const brainSphere = new THREE.Mesh(brainGeo, brainMat);
+    brainSphere.position.set(0, 2.3, 0.05);
+    brainGroup.add(brainSphere);
+})();
+
+// КОМБО-РЕЖИМ
+(function createCombo() {
+    const clonePlaneGeo = new THREE.PlaneGeometry(2.8, 3.0);
+    const clonePlaneMat = new THREE.MeshPhongMaterial({
+        color: 0x38bdf8,
+        transparent: true,
+        opacity: 0.18,
+        side: THREE.DoubleSide
+    });
+    const comboPlane = new THREE.Mesh(clonePlaneGeo, clonePlaneMat);
+    comboPlane.rotation.y = Math.PI / 2;
+    comboPlane.position.set(1.1, 1.5, 0);
+    comboPlane.userData.offset = comboPlane.position.x;
+    comboGroup.add(comboPlane);
+
+    const miniSphereGeo = new THREE.SphereGeometry(1.6, 32, 24);
+    const miniSphereMat = new THREE.MeshPhongMaterial({
+        color: 0x4ade80,
+        wireframe: true,
+        transparent: true,
+        opacity: 0.22
+    });
+    const miniSphere = new THREE.Mesh(miniSphereGeo, miniSphereMat);
+    miniSphere.position.set(0, 1.3, 0);
+    comboGroup.add(miniSphere);
+
+    const comboBeamGeo = new THREE.CylinderGeometry(0.04, 0.16, 1.9, 24, 1, true);
+    const comboBeamMat = new THREE.MeshPhongMaterial({
+        color: 0xf97316,
+        transparent: true,
+        opacity: 0.4,
+        side: THREE.DoubleSide
+    });
+    const comboBeam = new THREE.Mesh(comboBeamGeo, comboBeamMat);
+    comboBeam.position.set(0.7, 1.9, -0.6);
+    comboBeam.rotation.z = Math.PI / 2.8;
+    comboGroup.add(comboBeam);
+
+    comboGroup.userData = { plane: comboPlane, sphere: miniSphere, beam: comboBeam };
+})();
+
+// СКАНИРУЮЩЕЕ ГОЛОГРАФИЧЕСКОЕ ПОЛЕ (вертикальное сканирование по оси Y)
+const scanGroup = new THREE.Group();
+scene.add(scanGroup);
+let scanPlane = null;
+
+(function createScanPlane() {
+    const scanGeo = new THREE.PlaneGeometry(2.4, 2.4, 1, 1);
+    const scanMat = new THREE.MeshBasicMaterial({
+        color: 0x4ade80,
+        transparent: true,
+        opacity: 0.25,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending
+    });
+    scanPlane = new THREE.Mesh(scanGeo, scanMat);
+    scanPlane.rotation.x = -Math.PI / 2; // горизонтальная плоскость, сканирующая по высоте
+    scanPlane.position.set(0, 0.3, 0);
+    scanGroup.add(scanPlane);
+})();
+
+// UI / РЕЖИМЫ
+const freqValue       = document.getElementById('freqValue');
+const powerValue      = document.getElementById('powerValue');
+const distValue       = document.getElementById('distValue');
+const modeDescription = document.getElementById('modeDescription');
+
+const metricSar   = document.getElementById('metricSar');
+const metricE     = document.getElementById('metricE');
+const metricSound = document.getElementById('metricSound');
+
+const legendSvg   = document.getElementById('legend-svg');
+const legendLabel = document.getElementById('legend-label');
+
+function setMode(mode) {
+    microwaveGroup.visible  = (mode === 'microwave');
+    elfGroup.visible        = (mode === 'elf');
+    infrasoundGroup.visible = (mode === 'infrasound');
+    brainGroup.visible      = (mode === 'brain');
+    comboGroup.visible      = (mode === 'combo');
+
+    // зелёное сканирующее поле показываем только там, где ЭМ-воздействие
+    scanGroup.visible = (mode === 'microwave' || mode === 'brain' || mode === 'combo');
+
+    switch (mode) {
+        case 'microwave':
+            freqValue.textContent  = '3.5e9';
+            powerValue.textContent = '10';
+            distValue.textContent  = '1.0';
+            modeDescription.textContent =
+                'Микроволновое поле (3.5 ГГц) и распределение SAR в теле стоящего человека.';
+            metricSar.textContent   = '1.3';
+            metricE.textContent     = '45';
+            metricSound.textContent = '35';
+            break;
+        case 'elf':
+            freqValue.textContent  = '50';
+            powerValue.textContent = '2.0e3';
+            distValue.textContent  = '5.0';
+            modeDescription.textContent =
+                'ELF-поле (50 Гц) от токоведущего провода и индукция тока в теле человека.';
+            metricSar.textContent   = '0.01';
+            metricE.textContent     = '2.3';
+            metricSound.textContent = '30';
+            break;
+        case 'infrasound':
+            freqValue.textContent  = '8';
+            powerValue.textContent = '150';
+            distValue.textContent  = '3.0';
+            modeDescription.textContent =
+                'Звуковое давление инфразвука в помещении и распределение узлов/пучностей вокруг человека.';
+            metricSar.textContent   = '0.00';
+            metricE.textContent     = '0.0';
+            metricSound.textContent = '92';
+            break;
+        case 'brain':
+            freqValue.textContent  = '24.05e9';
+            powerValue.textContent = '0.1';
+            distValue.textContent  = '0.8';
+            modeDescription.textContent =
+                'Беспроводное радиолокационное считывание микродвижений головы и грудной клетки.';
+            metricSar.textContent   = '0.15';
+            metricE.textContent     = '8.5';
+            metricSound.textContent = '40';
+            break;
+        case 'combo':
+            freqValue.textContent  = 'вариант';
+            powerValue.textContent = 'комб.';
+            distValue.textContent  = '1–5';
+            modeDescription.textContent =
+                'Одновременное воздействие микроволн, ELF-поля и инфразвука на человека.';
+            metricSar.textContent   = '0.9';
+            metricE.textContent     = '25';
+            metricSound.textContent = '78';
+            break;
+    }
+}
+
+document.querySelectorAll('input[name="mode"]').forEach(radio => {
+    radio.addEventListener('change', (e) => {
+        if (e.target.checked) setMode(e.target.value);
+    });
+});
+
+document.getElementById('toggle-grid').addEventListener('change', (e) => {
+    grid.visible = e.target.checked;
+});
+document.getElementById('toggle-box').addEventListener('change', (e) => {
+    simBox.visible = e.target.checked;
+});
+document.getElementById('toggle-legend').addEventListener('change', (e) => {
+    const visible = e.target.checked;
+    legendSvg.style.display   = visible ? 'block' : 'none';
+    legendLabel.style.display = visible ? 'block' : 'none';
+});
+
+// Цветовые схемы полей
+const fieldPaletteSelect = document.getElementById('fieldPalette');
+let currentPalette = fieldPaletteSelect ? fieldPaletteSelect.value : 'blue';
+
+function applyFieldPalette(palette) {
+    let microwaveColor, panelColor, scanColor, brainColor;
+
+    switch (palette) {
+        case 'green':
+            microwaveColor = 0x22c55e;
+            panelColor     = 0x16a34a;
+            scanColor      = 0x4ade80;
+            brainColor     = 0x22c55e;
+            break;
+        case 'red':
+            microwaveColor = 0xf97316;
+            panelColor     = 0xf97316;
+            scanColor      = 0xfacc15;
+            brainColor     = 0xf97316;
+            break;
+        default: // blue
+            microwaveColor = 0x38bdf8;
+            panelColor     = 0x0ea5e9;
+            scanColor      = 0x4ade80;
+            brainColor     = 0xa855f7;
+            break;
+    }
+
+    microwavePlanes.forEach((plane) => {
+        plane.material.color.setHex(microwaveColor);
+    });
+
+    if (microwavePanel) {
+        microwavePanel.material.color.setHex(panelColor);
+        if (microwavePanel.material.emissive) {
+            microwavePanel.material.emissive.setHex(panelColor);
+        }
+    }
+
+    if (comboGroup.userData && comboGroup.userData.plane) {
+        comboGroup.userData.plane.material.color.setHex(microwaveColor);
+    }
+
+    if (brainBeam) {
+        brainBeam.material.color.setHex(brainColor);
+    }
+
+    if (scanPlane) {
+        scanPlane.material.color.setHex(scanColor);
+    }
+}
+
+fieldPaletteSelect.addEventListener('change', (e) => {
+    currentPalette = e.target.value;
+    applyFieldPalette(currentPalette);
+});
+
+// выбор модели человека
+const humanModelSelect = document.getElementById('humanModel');
+humanModelSelect.addEventListener('change', (e) => {
+    const value = e.target.value;
+    loadFBXModel(value);
+});
+
+// АНИМАЦИЯ
+const clock = new THREE.Clock();
+
+function animate() {
+    requestAnimationFrame(animate);
+    const t = clock.getElapsedTime();
+
+    if (microwaveGroup.visible) {
+        const speed = 0.8;
+        microwavePlanes.forEach((plane, idx) => {
+            const phase = t * speed + idx * 0.6;
+            plane.position.x = plane.userData.offset + Math.sin(phase) * 0.2;
+            plane.material.opacity = 0.16 + 0.12 * (0.5 + 0.5 * Math.sin(phase));
+        });
+    }
+
+    if (elfGroup.visible) {
+        elfLines.forEach((ring, idx) => {
+            const s = 1 + 0.05 * Math.sin(t * 1.2 + idx * 0.4);
+            ring.scale.setScalar(s);
+            ring.material.opacity = 0.35 + 0.2 * Math.sin(t + idx * 0.5) * 0.5;
+        });
+    }
+
+    if (infrasoundGroup.visible) {
+        infrasoundSpheres.forEach((sphere) => {
+            const phase = t * 0.7 + sphere.userData.phaseShift;
+            const k = 0.6 + Math.abs(Math.sin(phase)) * 2.6;
+            sphere.scale.set(k, k, k);
+            sphere.material.opacity = 0.07 + 0.23 * (1 - Math.abs(Math.sin(phase)));
+        });
+    }
+
+    if (brainGroup.visible && brainBeam) {
+        const beamPulse = 0.35 + 0.15 * (0.5 + 0.5 * Math.sin(t * 3.0));
+        brainBeam.material.opacity = beamPulse;
+    }
+
+    if (comboGroup.visible) {
+        const data = comboGroup.userData;
+        const time = t * 0.7;
+        data.plane.position.x = data.plane.userData.offset + Math.sin(time) * 0.25;
+        const s = 1.0 + 0.2 * Math.sin(time * 1.3);
+        data.sphere.scale.set(s, s, s);
+        data.beam.material.opacity = 0.25 + 0.15 * (0.5 + 0.5 * Math.sin(time * 2.1));
+    }
+
+    // вертикальное сканирование по высоте
+    if (scanGroup.visible && scanPlane) {
+        const base = 0.2;
+        const height = 2.8;
+        const s = (Math.sin(t * 0.6) + 1) / 2; // 0..1
+        scanPlane.position.y = base + s * height;
+        scanPlane.material.opacity = 0.15 + 0.15 * Math.abs(Math.cos(t * 0.6));
+    }
+
+    controls.update();
+    renderer.render(scene, camera);
+}
+animate();
+
+// РЕСАЙЗ
+function onWindowResize() {
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h);
+}
+window.addEventListener('resize', onWindowResize);
+
+// ИНИЦИАЛИЗАЦИЯ
+setMode('microwave');
+applyFieldPalette(currentPalette);
+loadFBXModel(humanModelSelect.value);
+</script>
+</body>
+</html>
