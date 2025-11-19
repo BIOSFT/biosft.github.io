@@ -229,8 +229,6 @@
       height:100%;
     }
 
-    /* вспышка – превращение подозреваемого в обвиняемого */
-
     .target-icon.hit {
       animation:targetHit 0.3s ease-out;
     }
@@ -286,7 +284,6 @@
       <canvas id="glCanvas"></canvas>
     </div>
 
-    <!-- Левый столбец: источники -->
     <div class="column left">
       <button class="source-icon video" data-mode="0" aria-label="">
         <svg viewBox="0 0 60 60">
@@ -317,7 +314,6 @@
       </button>
     </div>
 
-    <!-- Правый столбец: подозреваемые / цели -->
     <div class="column right">
       <div class="target-icon"><span class="cross"></span></div>
       <div class="target-icon"><span class="cross"></span></div>
@@ -326,394 +322,374 @@
   </div>
 </div>
 
-<script src="https://unpkg.com/three@0.161.0/build/three.module.js"></script>
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-  const canvas = document.getElementById('glCanvas');
-  const panel = document.querySelector('.center-panel');
-  if (!canvas || !panel || !window.THREE) return;
+<!-- ВЕСЬ JS — модуль, импортируем three.module.min.js -->
+<script type="module">
+  import * as THREE from 'https://unpkg.com/three@0.161.0/build/three.module.min.js';
 
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:true });
-  renderer.setPixelRatio(window.devicePixelRatio || 1);
+  document.addEventListener('DOMContentLoaded', () => {
+    const canvas = document.getElementById('glCanvas');
+    const panel = document.querySelector('.center-panel');
+    if (!canvas || !panel) return;
 
-  const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(36, 1, 0.1, 100);
-  camera.position.set(0, 0, 18);
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:true });
+    renderer.setPixelRatio(window.devicePixelRatio || 1);
 
-  const ambient = new THREE.AmbientLight(0xffffff, 0.9);
-  scene.add(ambient);
-  const dir = new THREE.DirectionalLight(0xffffff, 0.7);
-  dir.position.set(5, 7, 10);
-  scene.add(dir);
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(36, 1, 0.1, 100);
+    camera.position.set(0, 0, 18);
 
-  const rootGroup = new THREE.Group();
-  scene.add(rootGroup);
+    const ambient = new THREE.AmbientLight(0xffffff, 0.9);
+    scene.add(ambient);
+    const dir = new THREE.DirectionalLight(0xffffff, 0.7);
+    dir.position.set(5, 7, 10);
+    scene.add(dir);
 
-  /* ---------- GLSL фон (голографическая сетка) ---------- */
+    const rootGroup = new THREE.Group();
+    scene.add(rootGroup);
 
-  const gridUniforms = { uTime: { value: 0 } };
+    /* ---------- GLSL фон (голографическая сетка) ---------- */
 
-  const gridVertex = `
-    varying vec2 vUv;
-    void main(){
-      vUv = uv;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);
-    }
-  `;
+    const gridUniforms = { uTime: { value: 0 } };
 
-  const gridFragment = `
-    precision highp float;
-    varying vec2 vUv;
-    uniform float uTime;
-
-    float hash(vec2 p){
-      return fract(sin(dot(p, vec2(127.1, 311.7)))*43758.5453123);
-    }
-
-    void main(){
-      vec2 uv = vUv;
-
-      // Базовый фон
-      vec3 col = vec3(0.01,0.0,0.02);
-
-      // Красная сетка
-      float gx = fract(uv.x * 26.0);
-      float gy = fract(uv.y * 26.0);
-
-      float lineX = smoothstep(0.0,0.015,gx) + (1.0 - smoothstep(0.985,1.0,gx));
-      float lineY = smoothstep(0.0,0.015,gy) + (1.0 - smoothstep(0.985,1.0,gy));
-      float grid = clamp(lineX + lineY, 0.0, 1.0);
-
-      // Мелкие "битовые" точки
-      vec2 cell = floor(uv * vec2(40.0,40.0));
-      float r = hash(cell);
-      float flicker = 0.5 + 0.5*sin(uTime*1.3 + r*6.2831);
-      float dotMask = step(0.985, r) * flicker;
-
-      vec3 gridCol = vec3(0.8,0.15,0.15);
-      vec3 dotCol  = vec3(1.0,0.4,0.25);
-
-      col += gridCol * grid * 0.35;
-      col += dotCol * dotMask * 0.7;
-
-      gl_FragColor = vec4(col, 0.97);
-    }
-  `;
-
-  const bgGeo = new THREE.PlaneGeometry(10.2, 6.8);
-  const bgMat = new THREE.ShaderMaterial({
-    uniforms: gridUniforms,
-    vertexShader: gridVertex,
-    fragmentShader: gridFragment,
-    transparent:true
-  });
-  const bg = new THREE.Mesh(bgGeo, bgMat);
-  bg.position.set(0,0,-0.1);
-  rootGroup.add(bg);
-
-  /* ---------- Внутренние рамки, похожие на референс ---------- */
-
-  function makeSquareLine(width, height, color, insetZ){
-    const hw = width/2;
-    const hh = height/2;
-    const pts = [
-      new THREE.Vector3(-hw,-hh,insetZ),
-      new THREE.Vector3(hw,-hh,insetZ),
-      new THREE.Vector3(hw,hh,insetZ),
-      new THREE.Vector3(-hw,hh,insetZ)
-    ];
-    const geo = new THREE.BufferGeometry().setFromPoints(pts);
-    const mat = new THREE.LineBasicMaterial({ color, linewidth:2, transparent:true, opacity:0.9 });
-    return new THREE.LineLoop(geo, mat);
-  }
-
-  const outerSquare = makeSquareLine(9.0, 5.6, 0xff4b4b, 0.0);
-  const innerSquare = makeSquareLine(6.0, 6.0, 0xff4b4b, 0.0);
-  rootGroup.add(outerSquare);
-  rootGroup.add(innerSquare);
-
-  /* ---------- Узлы и рёбра графа ---------- */
-
-  const nodes = [];
-  const nodeCount = 26;
-  const nodeGeo = new THREE.SphereGeometry(0.12, 20, 20);
-  const nodeMat = new THREE.MeshStandardMaterial({
-    color:0xff4b4b,
-    emissive:0xff3b3b,
-    emissiveIntensity:1.4,
-    metalness:0.4,
-    roughness:0.2
-  });
-
-  const nodePositions = [];
-  for (let i = 0; i < nodeCount; i++) {
-    const x = THREE.MathUtils.lerp(-2.6, 2.6, Math.random());
-    const y = THREE.MathUtils.lerp(-2.6, 2.6, Math.random());
-    const pos = new THREE.Vector3(x,y,0.02);
-    nodePositions.push(pos);
-
-    const m = new THREE.Mesh(nodeGeo, nodeMat.clone());
-    m.position.copy(pos);
-    rootGroup.add(m);
-
-    nodes.push({
-      mesh: m,
-      position: pos,
-      heat: 0,
-      phase: Math.random() * Math.PI * 2
-    });
-  }
-
-  const edgePoints = [];
-  for (let i = 0; i < nodeCount; i++) {
-    for (let j = i+1; j < nodeCount; j++) {
-      if (Math.random() < 0.23) {
-        const a = nodePositions[i];
-        const b = nodePositions[j];
-        edgePoints.push(a.x,a.y,a.z, b.x,b.y,b.z);
+    const gridVertex = `
+      varying vec2 vUv;
+      void main(){
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);
       }
+    `;
+
+    const gridFragment = `
+      precision highp float;
+      varying vec2 vUv;
+      uniform float uTime;
+
+      float hash(vec2 p){
+        return fract(sin(dot(p, vec2(127.1, 311.7)))*43758.5453123);
+      }
+
+      void main(){
+        vec2 uv = vUv;
+        vec3 col = vec3(0.01,0.0,0.02);
+
+        float gx = fract(uv.x * 26.0);
+        float gy = fract(uv.y * 26.0);
+
+        float lineX = smoothstep(0.0,0.015,gx) + (1.0 - smoothstep(0.985,1.0,gx));
+        float lineY = smoothstep(0.0,0.015,gy) + (1.0 - smoothstep(0.985,1.0,gy));
+        float grid = clamp(lineX + lineY, 0.0, 1.0);
+
+        vec2 cell = floor(uv * vec2(40.0,40.0));
+        float r = hash(cell);
+        float flicker = 0.5 + 0.5*sin(uTime*1.3 + r*6.2831);
+        float dotMask = step(0.985, r) * flicker;
+
+        vec3 gridCol = vec3(0.8,0.15,0.15);
+        vec3 dotCol  = vec3(1.0,0.4,0.25);
+
+        col += gridCol * grid * 0.35;
+        col += dotCol * dotMask * 0.7;
+
+        gl_FragColor = vec4(col, 0.97);
+      }
+    `;
+
+    const bgGeo = new THREE.PlaneGeometry(10.2, 6.8);
+    const bgMat = new THREE.ShaderMaterial({
+      uniforms: gridUniforms,
+      vertexShader: gridVertex,
+      fragmentShader: gridFragment,
+      transparent:true
+    });
+    const bg = new THREE.Mesh(bgGeo, bgMat);
+    bg.position.set(0,0,-0.1);
+    rootGroup.add(bg);
+
+    function makeSquareLine(width, height, color, insetZ){
+      const hw = width/2;
+      const hh = height/2;
+      const pts = [
+        new THREE.Vector3(-hw,-hh,insetZ),
+        new THREE.Vector3(hw,-hh,insetZ),
+        new THREE.Vector3(hw,hh,insetZ),
+        new THREE.Vector3(-hw,hh,insetZ)
+      ];
+      const geo = new THREE.BufferGeometry().setFromPoints(pts);
+      const mat = new THREE.LineBasicMaterial({ color, linewidth:2, transparent:true, opacity:0.9 });
+      return new THREE.LineLoop(geo, mat);
     }
-  }
-  const edgeGeo = new THREE.BufferGeometry();
-  edgeGeo.setAttribute('position', new THREE.Float32BufferAttribute(edgePoints,3));
-  const edgeMat = new THREE.LineBasicMaterial({
-    color:0xff4b4b,
-    transparent:true,
-    opacity:0.65
-  });
-  const edges = new THREE.LineSegments(edgeGeo, edgeMat);
-  rootGroup.add(edges);
 
-  /* ---------- Ретикулы (прицельные круги вокруг горячих нод) ---------- */
+    const outerSquare = makeSquareLine(9.0, 5.6, 0xff4b4b, 0.0);
+    const innerSquare = makeSquareLine(6.0, 6.0, 0xff4b4b, 0.0);
+    rootGroup.add(outerSquare);
+    rootGroup.add(innerSquare);
 
-  function makeReticle(){
-    const g = new THREE.Group();
-    const ringGeo = new THREE.RingGeometry(0.32,0.52,40);
-    const ringMat = new THREE.MeshBasicMaterial({ color:0xff4b4b, transparent:true, opacity:0.95 });
-    const ring = new THREE.Mesh(ringGeo, ringMat);
-    g.add(ring);
-
-    const lineMat = new THREE.LineBasicMaterial({ color:0xff4b4b, transparent:true, opacity:0.9 });
-
-    const horizGeo = new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(-0.8,0,0.01),
-      new THREE.Vector3( 0.8,0,0.01)
-    ]);
-    g.add(new THREE.Line(horizGeo, lineMat));
-
-    const vertGeo = new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(0,-0.8,0.01),
-      new THREE.Vector3(0, 0.8,0.01)
-    ]);
-    g.add(new THREE.Line(vertGeo, lineMat));
-
-    const dotGeo = new THREE.CircleGeometry(0.12,24);
-    const dotMat = new THREE.MeshBasicMaterial({ color:0xff4b4b });
-    const dot = new THREE.Mesh(dotGeo, dotMat);
-    dot.position.set(0,0,0.02);
-    g.add(dot);
-
-    g.visible = false;
-    g.userData.time = 0;
-    return g;
-  }
-
-  const reticles = [ makeReticle(), makeReticle() ];
-  reticles.forEach(r => rootGroup.add(r));
-
-  /* ---------- Биты (0/1) – маленькие кубы ---------- */
-
-  const bits = [];
-  const bitGeo = new THREE.BoxGeometry(0.09,0.09,0.09);
-
-  function spawnBit(mode, targetNode){
-    const color =
-      mode === 0 ? 0x38bdf8 :
-      mode === 1 ? 0x22c55e :
-                   0xfacc15;
-
-    const mat = new THREE.MeshStandardMaterial({
-      color:0xffffff,
-      emissive:color,
+    const nodes = [];
+    const nodeCount = 26;
+    const nodeGeo = new THREE.SphereGeometry(0.12, 20, 20);
+    const nodeMat = new THREE.MeshStandardMaterial({
+      color:0xff4b4b,
+      emissive:0xff3b3b,
       emissiveIntensity:1.4,
       metalness:0.4,
       roughness:0.2
     });
 
-    const mesh = new THREE.Mesh(bitGeo, mat);
-    const startX = -2.6 - 0.4 + Math.random()*0.2;
-    const startY = THREE.MathUtils.lerp(-2.4, 2.4, Math.random());
-    mesh.position.set(startX, startY, 0.18);
+    const nodePositions = [];
+    for (let i = 0; i < nodeCount; i++) {
+      const x = THREE.MathUtils.lerp(-2.6, 2.6, Math.random());
+      const y = THREE.MathUtils.lerp(-2.6, 2.6, Math.random());
+      const pos = new THREE.Vector3(x,y,0.02);
+      nodePositions.push(pos);
 
-    const angle = (Math.random()*Math.PI/4.0) - Math.PI/8.0;
-    const speed = 0.035 + Math.random()*0.035;
-    const vel = new THREE.Vector3(Math.cos(angle), Math.sin(angle), 0).multiplyScalar(speed);
+      const m = new THREE.Mesh(nodeGeo, nodeMat.clone());
+      m.position.copy(pos);
+      rootGroup.add(m);
 
-    rootGroup.add(mesh);
-    bits.push({
-      mesh,
-      velocity: vel,
-      target: targetNode,
-      phase: 'scatter',
-      life: 0,
-      modeBoost: mode
-    });
-  }
-
-  /* ---------- Управление размером окна ---------- */
-
-  function resize(){
-    const rect = panel.getBoundingClientRect();
-    const width = rect.width;
-    const height = rect.height;
-    if (!width || !height) return;
-    renderer.setSize(width, height, false);
-    camera.aspect = width/height;
-    camera.updateProjectionMatrix();
-  }
-
-  window.addEventListener('resize', resize);
-  resize();
-
-  /* ---------- Вход с клавиатуры / мыши ---------- */
-
-  const sources = Array.from(document.querySelectorAll('.source-icon'));
-  const domTargets = Array.from(document.querySelectorAll('.target-icon'));
-
-  let currentMode = 0;
-  sources.forEach((btn, index) => {
-    btn.addEventListener('click', () => {
-      triggerFlow(index);
-    });
-  });
-  if (sources[0]) sources[0].classList.add('active');
-
-  document.addEventListener('keydown', (e) => {
-    if (e.code === 'Digit1' || e.code === 'Numpad1') triggerFlow(0);
-    else if (e.code === 'Digit2' || e.code === 'Numpad2') triggerFlow(1);
-    else if (e.code === 'Digit3' || e.code === 'Numpad3') triggerFlow(2);
-    else if (e.code === 'Space') triggerFlow(Math.floor(Math.random()*3));
-  });
-
-  function randomDomHit(){
-    if (!domTargets.length) return;
-    const count = 1 + Math.floor(Math.random()*domTargets.length);
-    const used = new Set();
-    for (let i=0;i<count;i++){
-      const idx = Math.floor(Math.random()*domTargets.length);
-      if (used.has(idx)) continue;
-      used.add(idx);
-      const el = domTargets[idx];
-      el.classList.add('hit');
-      setTimeout(() => el.classList.remove('hit'), 320);
-    }
-  }
-
-  function pickRandomNodes(k){
-    const indices = nodes.map((_, i) => i);
-    for (let i = indices.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [indices[i], indices[j]] = [indices[j], indices[i]];
-    }
-    return indices.slice(0, k).map(idx => nodes[idx]);
-  }
-
-  function triggerFlow(mode){
-    currentMode = mode;
-    sources.forEach((btn, idx) => {
-      btn.classList.toggle('active', idx === mode);
-    });
-
-    const selectedNodes = pickRandomNodes(2 + Math.floor(Math.random()*2));
-
-    reticles.forEach((r, idx) => {
-      if (idx < selectedNodes.length) {
-        const node = selectedNodes[idx];
-        r.position.copy(node.position);
-        r.position.z = 0.05;
-        r.visible = true;
-        r.userData.time = 0;
-        node.heat += 1.5;
-      } else {
-        r.visible = false;
-      }
-    });
-
-    const bitCount = 60;
-    for (let i = 0; i < bitCount; i++) {
-      const tNode = selectedNodes[Math.floor(Math.random()*selectedNodes.length)];
-      spawnBit(mode, tNode);
+      nodes.push({
+        mesh: m,
+        position: pos,
+        heat: 0,
+        phase: Math.random() * Math.PI * 2
+      });
     }
 
-    randomDomHit();
-  }
-
-  /* ---------- Анимация ---------- */
-
-  let start = performance.now();
-  let last = start;
-
-  function animate() {
-    const now = performance.now();
-    const t = (now - start) / 1000;
-    const dt = (now - last) / 1000;
-    last = now;
-
-    gridUniforms.uTime.value = t;
-
-    // Пульсация узлов
-    nodes.forEach(n => {
-      n.heat *= 0.985;
-      const base = 1.0;
-      const heatFactor = 1.0 + n.heat * 0.7;
-      const pulse = 1.0 + 0.22 * Math.sin(t * 4.5 + n.phase);
-      const scale = base * heatFactor * pulse * 0.9;
-      n.mesh.scale.set(scale, scale, scale);
-    });
-
-    // Движение битов: сначала разлёт, потом сбор в ноды
-    for (let i = bits.length - 1; i >= 0; i--) {
-      const b = bits[i];
-      b.life += dt;
-
-      if (b.phase === 'scatter' && b.life > 0.35) {
-        b.phase = 'gather';
-      }
-
-      if (b.phase === 'scatter') {
-        b.mesh.position.add(b.velocity);
-      } else {
-        const targetPos = b.target.position;
-        const dir = new THREE.Vector3().subVectors(targetPos, b.mesh.position);
-        const dist = dir.length();
-        if (dist < 0.17 || b.life > 3.0) {
-          b.target.heat += 0.35;
-          rootGroup.remove(b.mesh);
-          bits.splice(i,1);
-          continue;
+    const edgePoints = [];
+    for (let i = 0; i < nodeCount; i++) {
+      for (let j = i+1; j < nodeCount; j++) {
+        if (Math.random() < 0.23) {
+          const a = nodePositions[i];
+          const b = nodePositions[j];
+          edgePoints.push(a.x,a.y,a.z, b.x,b.y,b.z);
         }
-        dir.normalize();
-        const speed = 0.04 + 0.03 * (b.modeBoost + 1);
-        b.mesh.position.addScaledVector(dir, speed);
+      }
+    }
+    const edgeGeo = new THREE.BufferGeometry();
+    edgeGeo.setAttribute('position', new THREE.Float32BufferAttribute(edgePoints,3));
+    const edgeMat = new THREE.LineBasicMaterial({
+      color:0xff4b4b,
+      transparent:true,
+      opacity:0.65
+    });
+    const edges = new THREE.LineSegments(edgeGeo, edgeMat);
+    rootGroup.add(edges);
+
+    function makeReticle(){
+      const g = new THREE.Group();
+      const ringGeo = new THREE.RingGeometry(0.32,0.52,40);
+      const ringMat = new THREE.MeshBasicMaterial({ color:0xff4b4b, transparent:true, opacity:0.95 });
+      const ring = new THREE.Mesh(ringGeo, ringMat);
+      g.add(ring);
+
+      const lineMat = new THREE.LineBasicMaterial({ color:0xff4b4b, transparent:true, opacity:0.9 });
+
+      const horizGeo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(-0.8,0,0.01),
+        new THREE.Vector3( 0.8,0,0.01)
+      ]);
+      g.add(new THREE.Line(horizGeo, lineMat));
+
+      const vertGeo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0,-0.8,0.01),
+        new THREE.Vector3(0, 0.8,0.01)
+      ]);
+      g.add(new THREE.Line(vertGeo, lineMat));
+
+      const dotGeo = new THREE.CircleGeometry(0.12,24);
+      const dotMat = new THREE.MeshBasicMaterial({ color:0xff4b4b });
+      const dot = new THREE.Mesh(dotGeo, dotMat);
+      dot.position.set(0,0,0.02);
+      g.add(dot);
+
+      g.visible = false;
+      g.userData.time = 0;
+      return g;
+    }
+
+    const reticles = [ makeReticle(), makeReticle() ];
+    reticles.forEach(r => rootGroup.add(r));
+
+    const bits = [];
+    const bitGeo = new THREE.BoxGeometry(0.09,0.09,0.09);
+
+    function spawnBit(mode, targetNode){
+      const color =
+        mode === 0 ? 0x38bdf8 :
+        mode === 1 ? 0x22c55e :
+                     0xfacc15;
+
+      const mat = new THREE.MeshStandardMaterial({
+        color:0xffffff,
+        emissive:color,
+        emissiveIntensity:1.4,
+        metalness:0.4,
+        roughness:0.2
+      });
+
+      const mesh = new THREE.Mesh(bitGeo, mat);
+      const startX = -2.6 - 0.4 + Math.random()*0.2;
+      const startY = THREE.MathUtils.lerp(-2.4, 2.4, Math.random());
+      mesh.position.set(startX, startY, 0.18);
+
+      const angle = (Math.random()*Math.PI/4.0) - Math.PI/8.0;
+      const speed = 0.035 + Math.random()*0.035;
+      const vel = new THREE.Vector3(Math.cos(angle), Math.sin(angle), 0).multiplyScalar(speed);
+
+      rootGroup.add(mesh);
+      bits.push({
+        mesh,
+        velocity: vel,
+        target: targetNode,
+        phase: 'scatter',
+        life: 0,
+        modeBoost: mode
+      });
+    }
+
+    function resize(){
+      const rect = panel.getBoundingClientRect();
+      const width = rect.width;
+      const height = rect.height;
+      if (!width || !height) return;
+      renderer.setSize(width, height, false);
+      camera.aspect = width/height;
+      camera.updateProjectionMatrix();
+    }
+
+    window.addEventListener('resize', resize);
+    resize();
+
+    const sources = Array.from(document.querySelectorAll('.source-icon'));
+    const domTargets = Array.from(document.querySelectorAll('.target-icon'));
+
+    let currentMode = 0;
+
+    sources.forEach((btn, index) => {
+      btn.addEventListener('click', () => {
+        triggerFlow(index);
+      });
+    });
+    if (sources[0]) sources[0].classList.add('active');
+
+    document.addEventListener('keydown', (e) => {
+      if (e.code === 'Digit1' || e.code === 'Numpad1') triggerFlow(0);
+      else if (e.code === 'Digit2' || e.code === 'Numpad2') triggerFlow(1);
+      else if (e.code === 'Digit3' || e.code === 'Numpad3') triggerFlow(2);
+      else if (e.code === 'Space') triggerFlow(Math.floor(Math.random()*3));
+    });
+
+    function randomDomHit(){
+      if (!domTargets.length) return;
+      const count = 1 + Math.floor(Math.random()*domTargets.length);
+      const used = new Set();
+      for (let i=0;i<count;i++){
+        const idx = Math.floor(Math.random()*domTargets.length);
+        if (used.has(idx)) continue;
+        used.add(idx);
+        const el = domTargets[idx];
+        el.classList.add('hit');
+        setTimeout(() => el.classList.remove('hit'), 320);
       }
     }
 
-    // Анимация ретикулов
-    reticles.forEach(r => {
-      if (!r.visible) return;
-      r.userData.time += dt;
-      const s = 0.75 + 0.2 * Math.sin(r.userData.time * 3.0);
-      r.scale.set(s,s,s);
-    });
+    function pickRandomNodes(k){
+      const indices = nodes.map((_, i) => i);
+      for (let i = indices.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [indices[i], indices[j]] = [indices[j], indices[i]];
+      }
+      return indices.slice(0, k).map(idx => nodes[idx]);
+    }
 
-    rootGroup.rotation.z = 0.0; // можно добавить лёгкое покачивание при желании
+    function triggerFlow(mode){
+      currentMode = mode;
+      sources.forEach((btn, idx) => {
+        btn.classList.toggle('active', idx === mode);
+      });
 
-    renderer.render(scene, camera);
+      const selectedNodes = pickRandomNodes(2 + Math.floor(Math.random()*2));
+
+      reticles.forEach((r, idx) => {
+        if (idx < selectedNodes.length) {
+          const node = selectedNodes[idx];
+          r.position.copy(node.position);
+          r.position.z = 0.05;
+          r.visible = true;
+          r.userData.time = 0;
+          node.heat += 1.5;
+        } else {
+          r.visible = false;
+        }
+      });
+
+      const bitCount = 60;
+      for (let i = 0; i < bitCount; i++) {
+        const tNode = selectedNodes[Math.floor(Math.random()*selectedNodes.length)];
+        spawnBit(mode, tNode);
+      }
+
+      randomDomHit();
+    }
+
+    let start = performance.now();
+    let last = start;
+
+    function animate() {
+      const now = performance.now();
+      const t = (now - start) / 1000;
+      const dt = (now - last) / 1000;
+      last = now;
+
+      gridUniforms.uTime.value = t;
+
+      nodes.forEach(n => {
+        n.heat *= 0.985;
+        const base = 1.0;
+        const heatFactor = 1.0 + n.heat * 0.7;
+        const pulse = 1.0 + 0.22 * Math.sin(t * 4.5 + n.phase);
+        const scale = base * heatFactor * pulse * 0.9;
+        n.mesh.scale.set(scale, scale, scale);
+      });
+
+      for (let i = bits.length - 1; i >= 0; i--) {
+        const b = bits[i];
+        b.life += dt;
+
+        if (b.phase === 'scatter' && b.life > 0.35) {
+          b.phase = 'gather';
+        }
+
+        if (b.phase === 'scatter') {
+          b.mesh.position.add(b.velocity);
+        } else {
+          const targetPos = b.target.position;
+          const dir = new THREE.Vector3().subVectors(targetPos, b.mesh.position);
+          const dist = dir.length();
+          if (dist < 0.17 || b.life > 3.0) {
+            b.target.heat += 0.35;
+            rootGroup.remove(b.mesh);
+            bits.splice(i,1);
+            continue;
+          }
+          dir.normalize();
+          const speed = 0.04 + 0.03 * (b.modeBoost + 1);
+          b.mesh.position.addScaledVector(dir, speed);
+        }
+      }
+
+      reticles.forEach(r => {
+        if (!r.visible) return;
+        r.userData.time += dt;
+        const s = 0.75 + 0.2 * Math.sin(r.userData.time * 3.0);
+        r.scale.set(s,s,s);
+      });
+
+      renderer.render(scene, camera);
+      requestAnimationFrame(animate);
+    }
+
     requestAnimationFrame(animate);
-  }
-
-  requestAnimationFrame(animate);
-});
+  });
 </script>
 </body>
 </html>
