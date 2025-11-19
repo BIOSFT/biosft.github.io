@@ -1,0 +1,719 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>Pipeline Game – Holographic Flow</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --bg:#020617;
+      --bg2:#020314;
+      --panel:#02010a;
+      --cyan:#22d3ee;
+      --cyan-soft:#38bdf8;
+      --red:#fb7185;
+      --red-deep:#991b1b;
+      --grid:#0b1220;
+    }
+
+    * {
+      box-sizing:border-box;
+      margin:0;
+      padding:0;
+    }
+
+    body {
+      font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",system-ui,sans-serif;
+      min-height:100vh;
+      background:radial-gradient(circle at top,#0f172a 0%,#020617 45%,#000000 100%);
+      color:#e5e7eb;
+      overflow:hidden;
+    }
+
+    .root {
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:24px 16px;
+    }
+
+    .frame {
+      position:relative;
+      width:100%;
+      max-width:1360px;
+      aspect-ratio:16/9;
+      border-radius:32px;
+      overflow:hidden;
+      background:radial-gradient(circle at center,#020617,#020314 55%,#000000 100%);
+      box-shadow:0 40px 120px rgba(0,0,0,0.9);
+    }
+
+    .frame::before {
+      content:"";
+      position:absolute;
+      inset:-60px;
+      background-image:
+        linear-gradient(to right,rgba(15,23,42,0.55) 1px,transparent 1px),
+        linear-gradient(to bottom,rgba(15,23,42,0.55) 1px,transparent 1px);
+      background-size:64px 64px;
+      opacity:0.35;
+      pointer-events:none;
+    }
+
+    .center-panel {
+      position:absolute;
+      inset:10% 12%;
+      border-radius:32px;
+      background:radial-gradient(circle at center,#020617 0%,#000000 55%,#020617 100%);
+      box-shadow:
+        0 0 110px rgba(15,23,42,1),
+        0 -40px 90px rgba(0,0,0,0.9);
+      overflow:hidden;
+    }
+
+    #glCanvas {
+      width:100%;
+      height:100%;
+      display:block;
+    }
+
+    .column {
+      position:absolute;
+      top:50%;
+      transform:translateY(-50%);
+      z-index:4;
+      display:flex;
+      flex-direction:column;
+      gap:22px;
+    }
+
+    .column.left { left:5.5%; }
+    .column.right { right:5.5%; }
+
+    /* ЛЕВЫЕ ИСТОЧНИКИ */
+
+    .source-icon {
+      position:relative;
+      width:70px;
+      height:70px;
+      border-radius:22px;
+      border:1px solid rgba(56,189,248,0.75);
+      background:
+        radial-gradient(circle at 25% 20%,rgba(56,189,248,0.35),rgba(15,23,42,0.95));
+      box-shadow:
+        0 0 22px rgba(56,189,248,0.7),
+        0 0 80px rgba(8,47,73,0.9);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      cursor:pointer;
+      overflow:hidden;
+      transition:transform 0.18s ease,box-shadow 0.18s ease,border-color 0.18s ease;
+    }
+
+    .source-icon svg {
+      width:54%;
+      height:54%;
+      fill:none;
+      stroke:var(--cyan);
+      stroke-width:2.1;
+      stroke-linecap:round;
+      stroke-linejoin:round;
+    }
+
+    .source-icon::after {
+      content:"";
+      position:absolute;
+      inset:-28%;
+      border-radius:26px;
+      background:radial-gradient(circle at center,rgba(56,189,248,0.45),transparent 60%);
+      opacity:0;
+      pointer-events:none;
+      transition:opacity 0.2s ease;
+    }
+
+    .source-icon:hover {
+      transform:translateY(-2px) scale(1.03);
+      box-shadow:
+        0 0 35px rgba(56,189,248,0.95),
+        0 0 120px rgba(37,99,235,0.9);
+    }
+
+    .source-icon:hover::after,
+    .source-icon.active::after {
+      opacity:0.7;
+    }
+
+    .source-icon.active {
+      border-color:#e0f2fe;
+    }
+
+    /* ПРАВЫЕ ЦЕЛИ */
+
+    .target-icon {
+      position:relative;
+      width:64px;
+      height:82px;
+      border-radius:22px;
+      background:
+        radial-gradient(circle at 30% 22%,rgba(252,165,165,0.96),
+                                   rgba(127,29,29,0.96) 55%,
+                                   rgba(15,23,42,0.98) 100%);
+      box-shadow:
+        0 0 28px rgba(248,113,113,0.9),
+        0 0 80px rgba(248,113,113,0.75);
+      overflow:hidden;
+      cursor:pointer;
+      transition:transform 0.18s ease,box-shadow 0.18s ease;
+    }
+
+    .target-icon:hover {
+      transform:translateY(-2px) scale(1.03);
+      box-shadow:
+        0 0 40px rgba(248,250,252,1),
+        0 0 100px rgba(248,113,113,1);
+    }
+
+    .target-icon::before {
+      content:"";
+      position:absolute;
+      left:50%;
+      top:26%;
+      width:30px;
+      height:30px;
+      transform:translateX(-50%);
+      border-radius:50%;
+      background:rgba(0,0,0,0.55);
+      box-shadow:0 0 18px rgba(0,0,0,0.8);
+    }
+
+    .target-icon::after {
+      content:"";
+      position:absolute;
+      left:50%;
+      top:55%;
+      width:40px;
+      height:32px;
+      transform:translateX(-50%);
+      border-radius:50% 50% 14px 14px;
+      background:rgba(0,0,0,0.65);
+    }
+
+    .target-icon span.cross {
+      position:absolute;
+      inset:8px;
+      border-radius:16px;
+      border:2px solid rgba(254,242,242,0.35);
+      box-shadow:0 0 18px rgba(254,202,202,0.7);
+      pointer-events:none;
+    }
+
+    .target-icon span.cross::before,
+    .target-icon span.cross::after {
+      content:"";
+      position:absolute;
+      left:50%;
+      top:50%;
+      transform:translate(-50%,-50%);
+      background:rgba(248,250,252,0.45);
+    }
+
+    .target-icon span.cross::before {
+      width:100%;
+      height:1px;
+    }
+
+    .target-icon span.cross::after {
+      width:1px;
+      height:100%;
+    }
+
+    /* вспышка – превращение подозреваемого в обвиняемого */
+
+    .target-icon.hit {
+      animation:targetHit 0.3s ease-out;
+    }
+
+    @keyframes targetHit {
+      0% {
+        box-shadow:
+          0 0 10px rgba(251,113,133,0.7),
+          0 0 40px rgba(248,113,113,0.8);
+        transform:scale(1.0);
+      }
+      40% {
+        box-shadow:
+          0 0 40px rgba(255,255,255,1),
+          0 0 110px rgba(248,113,113,1);
+        transform:scale(1.08);
+      }
+      100% {
+        box-shadow:
+          0 0 28px rgba(248,113,113,0.9),
+          0 0 80px rgba(248,113,113,0.75);
+        transform:scale(1.0);
+      }
+    }
+
+    @media (max-width:1000px) {
+      .frame { border-radius:24px; }
+      .center-panel { inset:12% 13%; }
+    }
+
+    @media (max-width:800px) {
+      .frame { aspect-ratio:auto; height:80vh; }
+      .center-panel { inset:18% 12%; }
+      .column.left { left:4%; }
+      .column.right { right:4%; }
+      .source-icon,
+      .target-icon { transform:scale(0.9); }
+    }
+
+    @media (max-width:620px) {
+      .frame { height:90vh; }
+      .center-panel { inset:22% 10%; }
+      .column { gap:16px; }
+      .source-icon,
+      .target-icon { transform:scale(0.8); }
+    }
+  </style>
+</head>
+<body>
+<div class="root">
+  <div class="frame">
+    <div class="center-panel">
+      <canvas id="glCanvas"></canvas>
+    </div>
+
+    <!-- Левый столбец: источники -->
+    <div class="column left">
+      <button class="source-icon video" data-mode="0" aria-label="">
+        <svg viewBox="0 0 60 60">
+          <rect x="13" y="15" width="30" height="20" rx="6" ry="6" />
+          <polygon points="30,20 38,25 30,30" />
+          <rect x="16" y="19" width="3" height="3" />
+          <rect x="16" y="24" width="3" height="3" />
+          <rect x="16" y="29" width="3" height="3" />
+        </svg>
+      </button>
+
+      <button class="source-icon audio" data-mode="1" aria-label="">
+        <svg viewBox="0 0 60 60">
+          <path d="M12 30 Q16 17 20 30 T28 30 T36 30 T48 30" />
+          <path d="M16 36 v-12 M20 38 v-16 M24 36 v-12
+                   M28 40 v-20 M32 36 v-12 M36 38 v-16 M40 36 v-12" />
+        </svg>
+      </button>
+
+      <button class="source-icon chat" data-mode="2" aria-label="">
+        <svg viewBox="0 0 60 60">
+          <rect x="12" y="16" width="32" height="20" rx="7" ry="7" />
+          <polygon points="26,36 21,40 21,35" />
+          <circle cx="21" cy="26" r="2.3" />
+          <circle cx="29" cy="26" r="2.3" />
+          <circle cx="37" cy="26" r="2.3" />
+        </svg>
+      </button>
+    </div>
+
+    <!-- Правый столбец: подозреваемые / цели -->
+    <div class="column right">
+      <div class="target-icon"><span class="cross"></span></div>
+      <div class="target-icon"><span class="cross"></span></div>
+      <div class="target-icon"><span class="cross"></span></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/three@0.161.0/build/three.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const canvas = document.getElementById('glCanvas');
+  const panel = document.querySelector('.center-panel');
+  if (!canvas || !panel || !window.THREE) return;
+
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:true });
+  renderer.setPixelRatio(window.devicePixelRatio || 1);
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(36, 1, 0.1, 100);
+  camera.position.set(0, 0, 18);
+
+  const ambient = new THREE.AmbientLight(0xffffff, 0.9);
+  scene.add(ambient);
+  const dir = new THREE.DirectionalLight(0xffffff, 0.7);
+  dir.position.set(5, 7, 10);
+  scene.add(dir);
+
+  const rootGroup = new THREE.Group();
+  scene.add(rootGroup);
+
+  /* ---------- GLSL фон (голографическая сетка) ---------- */
+
+  const gridUniforms = { uTime: { value: 0 } };
+
+  const gridVertex = `
+    varying vec2 vUv;
+    void main(){
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);
+    }
+  `;
+
+  const gridFragment = `
+    precision highp float;
+    varying vec2 vUv;
+    uniform float uTime;
+
+    float hash(vec2 p){
+      return fract(sin(dot(p, vec2(127.1, 311.7)))*43758.5453123);
+    }
+
+    void main(){
+      vec2 uv = vUv;
+
+      // Базовый фон
+      vec3 col = vec3(0.01,0.0,0.02);
+
+      // Красная сетка
+      float gx = fract(uv.x * 26.0);
+      float gy = fract(uv.y * 26.0);
+
+      float lineX = smoothstep(0.0,0.015,gx) + (1.0 - smoothstep(0.985,1.0,gx));
+      float lineY = smoothstep(0.0,0.015,gy) + (1.0 - smoothstep(0.985,1.0,gy));
+      float grid = clamp(lineX + lineY, 0.0, 1.0);
+
+      // Мелкие "битовые" точки
+      vec2 cell = floor(uv * vec2(40.0,40.0));
+      float r = hash(cell);
+      float flicker = 0.5 + 0.5*sin(uTime*1.3 + r*6.2831);
+      float dotMask = step(0.985, r) * flicker;
+
+      vec3 gridCol = vec3(0.8,0.15,0.15);
+      vec3 dotCol  = vec3(1.0,0.4,0.25);
+
+      col += gridCol * grid * 0.35;
+      col += dotCol * dotMask * 0.7;
+
+      gl_FragColor = vec4(col, 0.97);
+    }
+  `;
+
+  const bgGeo = new THREE.PlaneGeometry(10.2, 6.8);
+  const bgMat = new THREE.ShaderMaterial({
+    uniforms: gridUniforms,
+    vertexShader: gridVertex,
+    fragmentShader: gridFragment,
+    transparent:true
+  });
+  const bg = new THREE.Mesh(bgGeo, bgMat);
+  bg.position.set(0,0,-0.1);
+  rootGroup.add(bg);
+
+  /* ---------- Внутренние рамки, похожие на референс ---------- */
+
+  function makeSquareLine(width, height, color, insetZ){
+    const hw = width/2;
+    const hh = height/2;
+    const pts = [
+      new THREE.Vector3(-hw,-hh,insetZ),
+      new THREE.Vector3(hw,-hh,insetZ),
+      new THREE.Vector3(hw,hh,insetZ),
+      new THREE.Vector3(-hw,hh,insetZ)
+    ];
+    const geo = new THREE.BufferGeometry().setFromPoints(pts);
+    const mat = new THREE.LineBasicMaterial({ color, linewidth:2, transparent:true, opacity:0.9 });
+    return new THREE.LineLoop(geo, mat);
+  }
+
+  const outerSquare = makeSquareLine(9.0, 5.6, 0xff4b4b, 0.0);
+  const innerSquare = makeSquareLine(6.0, 6.0, 0xff4b4b, 0.0);
+  rootGroup.add(outerSquare);
+  rootGroup.add(innerSquare);
+
+  /* ---------- Узлы и рёбра графа ---------- */
+
+  const nodes = [];
+  const nodeCount = 26;
+  const nodeGeo = new THREE.SphereGeometry(0.12, 20, 20);
+  const nodeMat = new THREE.MeshStandardMaterial({
+    color:0xff4b4b,
+    emissive:0xff3b3b,
+    emissiveIntensity:1.4,
+    metalness:0.4,
+    roughness:0.2
+  });
+
+  const nodePositions = [];
+  for (let i = 0; i < nodeCount; i++) {
+    const x = THREE.MathUtils.lerp(-2.6, 2.6, Math.random());
+    const y = THREE.MathUtils.lerp(-2.6, 2.6, Math.random());
+    const pos = new THREE.Vector3(x,y,0.02);
+    nodePositions.push(pos);
+
+    const m = new THREE.Mesh(nodeGeo, nodeMat.clone());
+    m.position.copy(pos);
+    rootGroup.add(m);
+
+    nodes.push({
+      mesh: m,
+      position: pos,
+      heat: 0,
+      phase: Math.random() * Math.PI * 2
+    });
+  }
+
+  const edgePoints = [];
+  for (let i = 0; i < nodeCount; i++) {
+    for (let j = i+1; j < nodeCount; j++) {
+      if (Math.random() < 0.23) {
+        const a = nodePositions[i];
+        const b = nodePositions[j];
+        edgePoints.push(a.x,a.y,a.z, b.x,b.y,b.z);
+      }
+    }
+  }
+  const edgeGeo = new THREE.BufferGeometry();
+  edgeGeo.setAttribute('position', new THREE.Float32BufferAttribute(edgePoints,3));
+  const edgeMat = new THREE.LineBasicMaterial({
+    color:0xff4b4b,
+    transparent:true,
+    opacity:0.65
+  });
+  const edges = new THREE.LineSegments(edgeGeo, edgeMat);
+  rootGroup.add(edges);
+
+  /* ---------- Ретикулы (прицельные круги вокруг горячих нод) ---------- */
+
+  function makeReticle(){
+    const g = new THREE.Group();
+    const ringGeo = new THREE.RingGeometry(0.32,0.52,40);
+    const ringMat = new THREE.MeshBasicMaterial({ color:0xff4b4b, transparent:true, opacity:0.95 });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    g.add(ring);
+
+    const lineMat = new THREE.LineBasicMaterial({ color:0xff4b4b, transparent:true, opacity:0.9 });
+
+    const horizGeo = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(-0.8,0,0.01),
+      new THREE.Vector3( 0.8,0,0.01)
+    ]);
+    g.add(new THREE.Line(horizGeo, lineMat));
+
+    const vertGeo = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(0,-0.8,0.01),
+      new THREE.Vector3(0, 0.8,0.01)
+    ]);
+    g.add(new THREE.Line(vertGeo, lineMat));
+
+    const dotGeo = new THREE.CircleGeometry(0.12,24);
+    const dotMat = new THREE.MeshBasicMaterial({ color:0xff4b4b });
+    const dot = new THREE.Mesh(dotGeo, dotMat);
+    dot.position.set(0,0,0.02);
+    g.add(dot);
+
+    g.visible = false;
+    g.userData.time = 0;
+    return g;
+  }
+
+  const reticles = [ makeReticle(), makeReticle() ];
+  reticles.forEach(r => rootGroup.add(r));
+
+  /* ---------- Биты (0/1) – маленькие кубы ---------- */
+
+  const bits = [];
+  const bitGeo = new THREE.BoxGeometry(0.09,0.09,0.09);
+
+  function spawnBit(mode, targetNode){
+    const color =
+      mode === 0 ? 0x38bdf8 :
+      mode === 1 ? 0x22c55e :
+                   0xfacc15;
+
+    const mat = new THREE.MeshStandardMaterial({
+      color:0xffffff,
+      emissive:color,
+      emissiveIntensity:1.4,
+      metalness:0.4,
+      roughness:0.2
+    });
+
+    const mesh = new THREE.Mesh(bitGeo, mat);
+    const startX = -2.6 - 0.4 + Math.random()*0.2;
+    const startY = THREE.MathUtils.lerp(-2.4, 2.4, Math.random());
+    mesh.position.set(startX, startY, 0.18);
+
+    const angle = (Math.random()*Math.PI/4.0) - Math.PI/8.0;
+    const speed = 0.035 + Math.random()*0.035;
+    const vel = new THREE.Vector3(Math.cos(angle), Math.sin(angle), 0).multiplyScalar(speed);
+
+    rootGroup.add(mesh);
+    bits.push({
+      mesh,
+      velocity: vel,
+      target: targetNode,
+      phase: 'scatter',
+      life: 0,
+      modeBoost: mode
+    });
+  }
+
+  /* ---------- Управление размером окна ---------- */
+
+  function resize(){
+    const rect = panel.getBoundingClientRect();
+    const width = rect.width;
+    const height = rect.height;
+    if (!width || !height) return;
+    renderer.setSize(width, height, false);
+    camera.aspect = width/height;
+    camera.updateProjectionMatrix();
+  }
+
+  window.addEventListener('resize', resize);
+  resize();
+
+  /* ---------- Вход с клавиатуры / мыши ---------- */
+
+  const sources = Array.from(document.querySelectorAll('.source-icon'));
+  const domTargets = Array.from(document.querySelectorAll('.target-icon'));
+
+  let currentMode = 0;
+  sources.forEach((btn, index) => {
+    btn.addEventListener('click', () => {
+      triggerFlow(index);
+    });
+  });
+  if (sources[0]) sources[0].classList.add('active');
+
+  document.addEventListener('keydown', (e) => {
+    if (e.code === 'Digit1' || e.code === 'Numpad1') triggerFlow(0);
+    else if (e.code === 'Digit2' || e.code === 'Numpad2') triggerFlow(1);
+    else if (e.code === 'Digit3' || e.code === 'Numpad3') triggerFlow(2);
+    else if (e.code === 'Space') triggerFlow(Math.floor(Math.random()*3));
+  });
+
+  function randomDomHit(){
+    if (!domTargets.length) return;
+    const count = 1 + Math.floor(Math.random()*domTargets.length);
+    const used = new Set();
+    for (let i=0;i<count;i++){
+      const idx = Math.floor(Math.random()*domTargets.length);
+      if (used.has(idx)) continue;
+      used.add(idx);
+      const el = domTargets[idx];
+      el.classList.add('hit');
+      setTimeout(() => el.classList.remove('hit'), 320);
+    }
+  }
+
+  function pickRandomNodes(k){
+    const indices = nodes.map((_, i) => i);
+    for (let i = indices.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [indices[i], indices[j]] = [indices[j], indices[i]];
+    }
+    return indices.slice(0, k).map(idx => nodes[idx]);
+  }
+
+  function triggerFlow(mode){
+    currentMode = mode;
+    sources.forEach((btn, idx) => {
+      btn.classList.toggle('active', idx === mode);
+    });
+
+    const selectedNodes = pickRandomNodes(2 + Math.floor(Math.random()*2));
+
+    reticles.forEach((r, idx) => {
+      if (idx < selectedNodes.length) {
+        const node = selectedNodes[idx];
+        r.position.copy(node.position);
+        r.position.z = 0.05;
+        r.visible = true;
+        r.userData.time = 0;
+        node.heat += 1.5;
+      } else {
+        r.visible = false;
+      }
+    });
+
+    const bitCount = 60;
+    for (let i = 0; i < bitCount; i++) {
+      const tNode = selectedNodes[Math.floor(Math.random()*selectedNodes.length)];
+      spawnBit(mode, tNode);
+    }
+
+    randomDomHit();
+  }
+
+  /* ---------- Анимация ---------- */
+
+  let start = performance.now();
+  let last = start;
+
+  function animate() {
+    const now = performance.now();
+    const t = (now - start) / 1000;
+    const dt = (now - last) / 1000;
+    last = now;
+
+    gridUniforms.uTime.value = t;
+
+    // Пульсация узлов
+    nodes.forEach(n => {
+      n.heat *= 0.985;
+      const base = 1.0;
+      const heatFactor = 1.0 + n.heat * 0.7;
+      const pulse = 1.0 + 0.22 * Math.sin(t * 4.5 + n.phase);
+      const scale = base * heatFactor * pulse * 0.9;
+      n.mesh.scale.set(scale, scale, scale);
+    });
+
+    // Движение битов: сначала разлёт, потом сбор в ноды
+    for (let i = bits.length - 1; i >= 0; i--) {
+      const b = bits[i];
+      b.life += dt;
+
+      if (b.phase === 'scatter' && b.life > 0.35) {
+        b.phase = 'gather';
+      }
+
+      if (b.phase === 'scatter') {
+        b.mesh.position.add(b.velocity);
+      } else {
+        const targetPos = b.target.position;
+        const dir = new THREE.Vector3().subVectors(targetPos, b.mesh.position);
+        const dist = dir.length();
+        if (dist < 0.17 || b.life > 3.0) {
+          b.target.heat += 0.35;
+          rootGroup.remove(b.mesh);
+          bits.splice(i,1);
+          continue;
+        }
+        dir.normalize();
+        const speed = 0.04 + 0.03 * (b.modeBoost + 1);
+        b.mesh.position.addScaledVector(dir, speed);
+      }
+    }
+
+    // Анимация ретикулов
+    reticles.forEach(r => {
+      if (!r.visible) return;
+      r.userData.time += dt;
+      const s = 0.75 + 0.2 * Math.sin(r.userData.time * 3.0);
+      r.scale.set(s,s,s);
+    });
+
+    rootGroup.rotation.z = 0.0; // можно добавить лёгкое покачивание при желании
+
+    renderer.render(scene, camera);
+    requestAnimationFrame(animate);
+  }
+
+  requestAnimationFrame(animate);
+});
+</script>
+</body>
+</html>
