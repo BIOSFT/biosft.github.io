@@ -1,0 +1,734 @@
+
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>Pipeline — Hologram v2</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+  <style>
+    :root{--bg:#020617;--cyan:#22d3ee;--red:#ff4b4b}
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,Arial;min-height:100vh;background:radial-gradient(circle at top,#0f172a 0%,#020617 45%,#000 100%);color:#e5e7eb;overflow:hidden}
+    .root{min-height:100vh;display:flex;align-items:stretch;justify-content:stretch;padding:0}
+    .frame{position:relative;width:100vw;height:100vh;max-width:none;border-radius:32px;overflow:hidden;background:radial-gradient(circle at center,#020617,#020314 55%,#000 100%);box-shadow:0 40px 120px rgba(0,0,0,0.9)}
+    .frame::before{content:"";position:absolute;inset:-60px;background-image:linear-gradient(to right,rgba(15,23,42,0.55) 1px,transparent 1px),linear-gradient(to bottom,rgba(15,23,42,0.55) 1px,transparent 1px);background-size:64px 64px;opacity:0.28;pointer-events:none}
+    .center-panel{position:absolute;inset:10% 12%;border-radius:28px;background:transparent;overflow:hidden;z-index:30}
+    canvas{width:100%;height:100%;display:block}
+    .column{position:absolute;top:50%;transform:translateY(-50%);z-index:10;display:flex;flex-direction:column;gap:40px}
+    .column.left{left:5.5%}
+    .column.right{right:5.5%}
+
+    .source-icon{position:relative;width:175px;height:175px;border-radius:28px;border:2px solid rgba(56,189,248,0.75);background:radial-gradient(circle at 25% 20%,rgba(56,189,248,0.25),rgba(15,23,42,0.95));box-shadow:0 0 40px rgba(56,189,248,0.7);display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden}
+    .source-icon svg{width:92%;height:92%;fill:none;stroke:var(--cyan);stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
+    .source-icon::after{content:"";position:absolute;inset:-28%;border-radius:26px;background:radial-gradient(circle at center,rgba(56,189,248,0.45),transparent 60%);opacity:0;pointer-events:none;transition:opacity .18s}
+    .source-icon:hover{transform:translateY(-2px) scale(1.03);box-shadow:0 0 35px rgba(56,189,248,0.95)}
+    .source-icon.active::after,.source-icon:hover::after{opacity:0.7}
+
+    .target-icon{position:relative;width:160px;height:205px;border-radius:28px;background:radial-gradient(circle at 30% 10%,rgba(248,113,113,0.9),rgba(15,23,42,0.98) 65%);box-shadow:0 0 50px rgba(248,113,113,0.9);overflow:hidden;cursor:pointer;display:flex;align-items:flex-end;justify-content:center;padding-bottom:8px}
+    .target-icon img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:saturate(1.1) contrast(1.05);pointer-events:none}
+    .target-icon::before{content:none;}
+    .target-icon::after{content:none;}
+    .target-icon span.cross{position:absolute;inset:10px;border-radius:20px;border:2px solid rgba(255,255,255,0.18);pointer-events:none}
+    .target-icon.hit{animation:hitAnim .32s ease-out}
+    @keyframes hitAnim{0%{transform:scale(1);box-shadow:0 0 12px rgba(255,150,150,0.7)}50%{transform:scale(1.06);box-shadow:0 0 60px rgba(255,255,255,0.95)}100%{transform:scale(1);box-shadow:0 0 28px rgba(255,100,100,0.9)}}
+
+    .game-title{position:absolute;top:4%;left:50%;transform:translateX(-50%);z-index:40;font-family:'Press Start 2P',system-ui,monospace;font-size:14px;letter-spacing:0.09em;text-transform:uppercase;color:#e5e7eb;text-shadow:0 0 10px rgba(56,189,248,0.9),0 0 26px rgba(15,23,42,1);white-space:nowrap;pointer-events:none;user-select:none}
+
+    #reticle-layer{position:absolute;inset:0;pointer-events:none;z-index:60;}
+    .reticle-dom{position:absolute;width:120px;height:120px;border-radius:50%;border:2px solid rgba(248,113,113,0.98);box-shadow:0 0 24px rgba(248,113,113,0.95);transform:translate(-50%,-50%);opacity:0;transition:opacity .18s;}
+    .reticle-dom::before,.reticle-dom::after{content:"";position:absolute;left:50%;top:50%;background:rgba(248,113,113,0.98);transform:translate(-50%,-50%);}
+    .reticle-dom::before{width:2px;height:110%;}
+    .reticle-dom::after{height:2px;width:110%;}
+    .reticle-dom.active{opacity:1;}
+
+    @media (max-width:1000px){.frame{border-radius:24px}.center-panel{inset:12% 13%}}
+  </style>
+</head>
+<body>
+<div class="root">
+  <div class="frame">
+    <div class="game-title">Цифровой Паноптикум</div>
+    <div class="center-panel">
+      <canvas id="gl"></canvas>
+    </div>
+
+    <div class="column left">
+      <button class="source-icon" data-mode="0" id="btn-video" title="Video"><svg viewBox="0 0 60 60">
+        <!-- иконка видео почти на всю высоту кнопки -->
+        <rect x="6" y="4" width="48" height="52" rx="12" ry="12"/>
+        <polygon points="14,18 50,30 14,42" fill="none" stroke-width="3.5"/>
+      </svg></button>
+      <button class="source-icon" data-mode="1" id="btn-audio" title="Audio"><svg viewBox="0 0 60 60">
+        <!-- волна почти во всю ширину и высоту -->
+        <path d="M4 30 Q 14 10 24 30 T 44 30 T 56 30" />
+      </svg></button>
+      <button class="source-icon" data-mode="2" id="btn-chat" title="Chat"><svg viewBox="0 0 60 60">
+        <!-- крупный пузырь сообщений, занимает почти весь квадрат -->
+        <rect x="6" y="12" width="48" height="30" rx="10" ry="10"/>
+        <polygon points="28,42 32,42 30,50"/>
+        <circle cx="20" cy="27" r="3.4"/>
+        <circle cx="30" cy="27" r="3.4"/>
+        <circle cx="40" cy="27" r="3.4"/>
+      </svg></button>
+    </div>
+
+    <div class="column right">
+      <div class="target-icon" id="t0">
+        <img src="https://geekandmorty.github.io/media/char_1.png" alt="Подозреваемый 1" loading="lazy" />
+        <span class="cross"></span>
+      </div>
+      <div class="target-icon" id="t1">
+        <img src="https://geekandmorty.github.io/media/char_2.png" alt="Подозреваемый 2" loading="lazy" />
+        <span class="cross"></span>
+      </div>
+      <div class="target-icon" id="t2">
+        <img src="https://geekandmorty.github.io/media/char_3.png" alt="Подозреваемый 3" loading="lazy" />
+        <span class="cross"></span>
+      </div>
+    </div>
+    <div id="reticle-layer"></div>
+  </div>
+</div>
+
+<script type="module">
+import * as THREE from 'https://unpkg.com/three@0.161.0/build/three.module.min.js';
+
+// Основная сцена
+const canvas = document.getElementById('gl');
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
+renderer.setPixelRatio(window.devicePixelRatio || 1);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(36, 1, 0.1, 100);
+camera.position.set(0, 0, 18);
+
+const ambient = new THREE.AmbientLight(0xffffff, 0.9); scene.add(ambient);
+const dir = new THREE.DirectionalLight(0xffffff, 0.6); dir.position.set(5,8,10); scene.add(dir);
+
+const root = new THREE.Group(); scene.add(root);
+const tmpVec3 = new THREE.Vector3();
+
+// helper: convert DOM element center -> world point on z=0 plane (center-panel coordinates)
+function domToWorld(el){
+  const panel = document.querySelector('.center-panel');
+  const rect = panel.getBoundingClientRect();
+  const elRect = el.getBoundingClientRect();
+  const cx = elRect.left + elRect.width/2;
+  const cy = elRect.top + elRect.height/2;
+  // normalized device coords relative to panel
+  const nx = ((cx - rect.left)/rect.width)*2 - 1;
+  const ny = -(((cy - rect.top)/rect.height)*2 - 1);
+  const ndc = new THREE.Vector3(nx, ny, 0);
+  ndc.unproject(camera);
+  // ray from camera through ndc, intersect with z=0 plane
+  const dirVec = ndc.clone().sub(camera.position).normalize();
+  const t = -camera.position.z / dirVec.z; // plane z=0
+  const worldPos = camera.position.clone().addScaledVector(dirVec, t);
+  return worldPos;
+}
+
+// Resize
+function resize(){
+  const rect = document.querySelector('.center-panel').getBoundingClientRect();
+  const w = rect.width; const h = rect.height;
+  renderer.setSize(w, h, false);
+  camera.aspect = w/h; camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize);
+resize();
+
+/* --------- Background radar panel (rounded rect + mesh grid) --------- */
+const bgUniforms = { uTime:{value:0}, uAspect:{value:1} };
+const bgVert = `varying vec2 vUv; void main(){vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`;
+const bgFrag = `precision highp float; varying vec2 vUv; uniform float uTime; uniform float uAspect;
+
+// rounded rect SDF
+float roundedBoxSDF(vec2 p, vec2 b, float r){ vec2 d=abs(p)-b+vec2(r); return length(max(d,0.0)) - r + min(max(d.x,d.y),0.0); }
+
+float grid(vec2 uv, float scale){ vec2 gv = fract(uv*scale)-0.5; float line = step(abs(gv.x), 0.01) + step(abs(gv.y), 0.01); return clamp(line,0.0,1.0); }
+
+void main(){
+  // place coordinate inside central area (-1..1 -> map to 0..1)
+  vec2 uv = vUv;
+  vec2 p = uv*2.0 - 1.0; p.x *= uAspect; 
+
+  // big rounded rect mask for the red field center
+  float rectW = 1.18; float rectH = 0.90; float radius = 0.12;
+  vec2 box = vec2(rectW, rectH);
+  float d = roundedBoxSDF(vec2(p.x,p.y), box, radius);
+  float inside = smoothstep(0.01, -0.01, d); // основная маска
+
+  // плавное затухание к краям: 0 в центре, 1 у границы прямоугольника
+  float edgeFade = smoothstep(-0.6, 0.0, d);
+  float body = inside * (1.0 - edgeFade);
+
+  // grid / radar background inside field
+  vec2 local = (p + box) / (2.0*box); // 0..1 inside
+  float g = grid(local, 30.0);
+
+  // concentric rings
+  float r = length(p / box);
+  float rings = smoothstep(0.18,0.17,abs(fract(r*6.0)-0.0));
+
+  // sweep line
+  float angle = atan(p.y,p.x) + uTime*0.9;
+  float sweep = smoothstep(0.98, 0.995, cos(angle));
+
+  vec3 base = vec3(0.0);
+  vec3 red = vec3(0.9,0.16,0.16);
+  vec3 col = base;
+
+  // field fill (прозрачный центр, плавно гаснет к краям)
+  col += red * 0.16 * body;
+
+  // grid on top
+  col += red * g * body * 0.45;
+  col += red * rings * body * 0.18;
+  col += vec3(1.0,0.5,0.2) * sweep * body * 0.12;
+
+  float alpha = body * 0.6;
+  gl_FragColor = vec4(col, alpha);
+}`;
+
+const bgPlane = new THREE.PlaneGeometry(10.0, 6.0, 1,1);
+const bgMat = new THREE.ShaderMaterial({ uniforms: bgUniforms, vertexShader:bgVert, fragmentShader:bgFrag, transparent:true });
+const bgMesh = new THREE.Mesh(bgPlane, bgMat); bgMesh.position.set(0,0, -0.05); root.add(bgMesh);
+
+/* --------- Graph nodes & edges (red) --------- */
+const nodes = []; const nodeCount = 26;
+const nodeGeo = new THREE.SphereGeometry(0.11, 14, 14);
+for(let i=0;i<nodeCount;i++){
+  const x = THREE.MathUtils.lerp(-4.6, 4.6, Math.random());
+  const y = THREE.MathUtils.lerp(-2.7, 2.7, Math.random());
+  const base = new THREE.Vector3(x, y, 0.02);
+  const m = new THREE.Mesh(
+    nodeGeo,
+    new THREE.MeshStandardMaterial({
+      color:0xff4b4b,
+      emissive:0xff3b3b,
+      emissiveIntensity:1.2,
+      metalness:0.2,
+      roughness:0.25
+    })
+  );
+  m.position.copy(base);
+  root.add(m);
+  nodes.push({
+    mesh: m,
+    base,
+    heat: 0,
+    visualHeat: 0,
+    phase: Math.random()*6.28,
+    floatPhaseX: Math.random()*Math.PI*2.0,
+    floatPhaseY: Math.random()*Math.PI*2.0
+  });
+}
+// edges: store pairs of node indices so lines follow moving nodes
+let edgePairs = [];
+for(let i=0;i<nodes.length;i++){
+  for(let j=i+1;j<nodes.length;j++){
+    if(Math.random()<0.22){
+      edgePairs.push([i,j]);
+    }
+  }
+}
+const edgePositions = new Float32Array(edgePairs.length * 6);
+const edgeGeo = new THREE.BufferGeometry();
+edgeGeo.setAttribute('position', new THREE.BufferAttribute(edgePositions,3));
+const edges = new THREE.LineSegments(
+  edgeGeo,
+  new THREE.LineBasicMaterial({color:0xff4b4b, transparent:true, opacity:0.6})
+);
+root.add(edges);
+
+/* --------- Reticles (spawn above nodes) --------- */
+function makeReticle(){
+  const g = new THREE.Group();
+  const ring = new THREE.RingGeometry(0.28,0.46,40);
+  const mat = new THREE.MeshBasicMaterial({color:0xff4b4b, transparent:true, opacity:0.95, depthTest:false, depthWrite:false});
+  const ringMesh = new THREE.Mesh(ring, mat); g.add(ringMesh);
+  const horiz = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-0.8,0,0.01),new THREE.Vector3(0.8,0,0.01)]), new THREE.LineBasicMaterial({color:0xff4b4b, transparent:true, opacity:1, depthTest:false, depthWrite:false})); g.add(horiz);
+  const vert = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,-0.8,0.01),new THREE.Vector3(0,0.8,0.01)]), new THREE.LineBasicMaterial({color:0xff4b4b, transparent:true, opacity:1, depthTest:false, depthWrite:false})); g.add(vert);
+  const dot = new THREE.Mesh(new THREE.CircleGeometry(0.12,24), new THREE.MeshBasicMaterial({color:0xff4b4b, transparent:true, opacity:1, depthTest:false, depthWrite:false})); dot.position.z=0.02; g.add(dot);
+  g.visible=false;
+  g.userData = { t:0, phase:'idle', anchorNode:null, spawn:0, sliding:null, targetEl:null };
+  return g;
+}
+const reticles = [makeReticle(), makeReticle()];
+reticles.forEach(r=>{ r.renderOrder = 10; root.add(r); });
+
+const frameEl = document.querySelector('.frame');
+const reticleLayer = document.getElementById('reticle-layer');
+const domReticles = reticles.map(() => {
+  const el = document.createElement('div');
+  el.className = 'reticle-dom';
+  reticleLayer.appendChild(el);
+  return el;
+});
+reticles.forEach((r,i)=>{ r.userData.domEl = domReticles[i]; });
+
+/* --------- hologram icon texture helper (CanvasTexture) --------- */
+function makeIconTexture(mode){
+  const size = 128; const cvs = document.createElement('canvas'); cvs.width=size; cvs.height=size; const ctx=cvs.getContext('2d');
+  ctx.clearRect(0,0,size,size);
+  // soft circular hologram background
+  const g=ctx.createRadialGradient(size/2,size/2,10,size/2,size/2,size/1.6);
+  g.addColorStop(0,'rgba(60,190,255,0.12)'); g.addColorStop(1,'rgba(0,0,0,0)'); ctx.fillStyle=g; ctx.fillRect(0,0,size,size);
+  ctx.translate(size/2,size/2);
+  ctx.globalCompositeOperation='lighter';
+  ctx.strokeStyle='rgba(255,255,255,0.9)'; ctx.lineWidth=4; ctx.lineCap='round'; ctx.lineJoin='round'; ctx.beginPath();
+  if(mode===0){ // play icon
+    ctx.moveTo(-14,-18); ctx.lineTo(18,0); ctx.lineTo(-14,18); ctx.closePath(); ctx.fillStyle='rgba(34,211,238,0.96)'; ctx.fill();
+  } else if(mode===1){ // wave
+    ctx.strokeStyle='rgba(34,211,238,0.98)'; ctx.lineWidth=6; ctx.beginPath(); ctx.moveTo(-20,0); ctx.quadraticCurveTo(-10,-18,-2,0); ctx.quadraticCurveTo(6,18,18,0); ctx.stroke();
+  } else { // chat
+    ctx.fillStyle='rgba(34,211,238,0.98)'; ctx.beginPath(); ctx.roundRect(-22,-14,44,28,6); ctx.fill();
+    ctx.fillStyle='rgba(0,10,20,0.9)';
+    ctx.beginPath(); ctx.arc(-10,0,3,0,Math.PI*2); ctx.arc(0,0,3,0,Math.PI*2); ctx.arc(10,0,3,0,Math.PI*2); ctx.fill();
+  }
+  const tex = new THREE.CanvasTexture(cvs);
+  tex.needsUpdate = true;
+  return tex;
+}
+
+/* polyfill roundRect for some browsers */
+CanvasRenderingContext2D.prototype.roundRect = CanvasRenderingContext2D.prototype.roundRect || function(x,y,w,h,r){ if(!r) r=6; this.beginPath(); this.moveTo(x+r,y); this.arcTo(x+w,y,x+w,y+h,r); this.arcTo(x+w,y+h,x,y+h,r); this.arcTo(x,y+h,x,y,r); this.arcTo(x,y,x+w,y,r); this.closePath(); };
+
+/* --------- bits (0/1) objects --------- */
+const bits = [];
+const bitTextures = {};
+const holograms = [];
+
+function getBitTexture(bit, isCyan){
+  const key = `${bit}-${isCyan ? 'c' : 'r'}`;
+  if (bitTextures[key]) return bitTextures[key];
+
+  const size = 512;
+  const cvs = document.createElement('canvas');
+  cvs.width = size; cvs.height = size;
+  const ctx = cvs.getContext('2d');
+  ctx.clearRect(0,0,size,size);
+
+  const baseColor = isCyan ? '34,211,238' : '255,75,75';
+
+  const grad = ctx.createRadialGradient(size/2,size/2,4,size/2,size/2,size/2.1);
+  ctx.fillStyle = `rgba(${baseColor},0.08)`;
+  ctx.beginPath();
+  ctx.arc(size/2,size/2,size/2.05,0,Math.PI*2);
+  ctx.fill();
+
+  ctx.fillStyle = `rgba(${baseColor},0.98)`;
+  ctx.font = '700 312px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI"';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.shadowColor = `rgba(${baseColor},0.95)`;
+  ctx.shadowBlur = 18;
+  ctx.fillText(String(bit), size/2, size/2 + 4);
+
+  const tex = new THREE.CanvasTexture(cvs);
+  tex.needsUpdate = true;
+  bitTextures[key] = tex;
+  return tex;
+}
+
+
+function spawnHologramThenBits(mode){
+  // spawn hologрам at DOM source position
+  const sourceEl = document.querySelector('.source-icon.active') || document.querySelector('.source-icon');
+  const worldStart = domToWorld(sourceEl);
+  // small plane with icon texture
+  const tex = makeIconTexture(mode);
+  const mat = new THREE.MeshBasicMaterial({map:tex,transparent:true,opacity:0.95,depthTest:true});
+  const geo = new THREE.PlaneGeometry(0.8,0.8);
+  const holo = new THREE.Mesh(geo, mat);
+  holo.position.copy(worldStart); holo.position.z = 0.4; holo.userData = { mode, life:0, state:'fly', target: new THREE.Vector3(-2.6, 0.0, 0.2) };
+  root.add(holo);
+
+  // animate: move to entry near center, then explode into bits
+  holograms.push(holo);
+}
+
+function spawnBitFrom(pos, mode, targetNode){
+  // случайный бит, цвет не привязан к его значению
+  const bit = Math.random() > 0.5 ? 1 : 0;
+  const isCyan = Math.random() < 0.5; // true -> циан, false -> красный
+  const tex = getBitTexture(bit, isCyan);
+
+  // крупная "голографическая" цифра
+  const geo = new THREE.PlaneGeometry(0.96, 0.96);
+  const mat = new THREE.MeshBasicMaterial({
+    map: tex,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.copy(pos);
+  mesh.position.z += 0.05;
+  // лёгкий разброс вокруг точки взрыва, чтобы цифры не рождались в одной куче
+  mesh.position.x += (Math.random()-0.5)*0.8;
+  mesh.position.y += (Math.random()-0.5)*0.8;
+  root.add(mesh);
+
+  const angle = Math.random()*Math.PI*2.0;
+  const speed = 0.035 + Math.random()*0.055;
+  const vel = new THREE.Vector3(
+    Math.cos(angle)*speed,
+    Math.sin(angle)*speed,
+    (Math.random()-0.5)*0.02
+  );
+
+  bits.push({
+    mesh,
+    target: targetNode,
+    phase: 'scatter',
+    life: 0,
+    vel,
+    mode,
+    gatherT: 0
+  });
+}
+
+// мишени теперь появляются в момент входа цифр в узлы, без отложенного таймера
+function spawnReticleOnNode(nodeObj){
+  // если на этом узле уже висит мишень (любой фазы, кроме fade/idle) — вторую не создаём
+  for (const r of reticles) {
+    const ud = r.userData;
+    if (ud.anchorNode === nodeObj && ud.phase !== 'fade' && ud.phase !== 'idle') {
+      return;
+    }
+  }
+
+  // ищем свободную мишень (idle или невидимую)
+  let free = null;
+  for (const r of reticles) {
+    const ud = r.userData;
+    if (ud.phase === 'idle' || !r.visible) {
+      free = r;
+      break;
+    }
+  }
+  if (!free) return;
+
+  const ud = free.userData;
+  const p = nodeObj.mesh.position;
+
+  free.visible = true;
+  ud.phase = 'lock';
+  ud.anchorNode = nodeObj;
+  ud.t = 0;
+  ud.spawn = 0;
+  ud.sliding = null;
+  ud.targetEl = null;
+  free.position.set(p.x, p.y, 0.05);
+  free.scale.set(0.25, 0.25, 0.25);
+
+  nodeObj.heat = Math.min(nodeObj.heat + 0.7, 2.0);
+}
+
+function pulseTarget(el){
+  if(!el) return;
+  el.classList.remove('hit');
+  // принудительный рефлоу, чтобы CSS-анимация могла стартовать снова
+  void el.offsetWidth;
+  el.classList.add('hit');
+}
+
+/* trigger flow */
+function pickRandomNodes(k){
+  const idx = Array.from({length:nodes.length},(_,i)=>i);
+  for(let i=idx.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [idx[i],idx[j]]=[idx[j],idx[i]];
+  }
+  return idx.slice(0,k).map(i=>nodes[i]);
+}
+
+function fadePinnedReticles(){
+  reticles.forEach(r=>{
+    const ud = r.userData;
+    if(ud.phase === 'pinned'){
+      ud.phase = 'fade';
+      ud.fade = 1;
+    }
+  });
+}
+
+function triggerFlow(mode){
+  // подсветить активную кнопку
+  document.querySelectorAll('.source-icon').forEach((b, i)=> b.classList.toggle('active', i===mode));
+
+  // при новом выстреле существующие закреплённые мишени начинают плавно исчезать
+  fadePinnedReticles();
+
+  // запуск выстрела (голограммы)
+  spawnHologramThenBits(mode);
+}
+
+// bind buttons
+document.querySelectorAll('.source-icon').forEach((btn, idx)=> btn.addEventListener('click', ()=> triggerFlow(idx)));
+document.addEventListener('keydown',(e)=>{ if(e.code==='Digit1') triggerFlow(0); if(e.code==='Digit2') triggerFlow(1); if(e.code==='Digit3') triggerFlow(2); if(e.code==='Space') triggerFlow(Math.floor(Math.random()*3)); });
+
+/* лёгкие самопроверки, чтобы ловить ошибки логики раньше */
+function runSelfTests(){
+  console.assert(typeof THREE !== 'undefined', 'THREE must be loaded');
+  console.assert(nodes.length === nodeCount, 'nodes length mismatch');
+  console.assert(typeof pickRandomNodes === 'function', 'pickRandomNodes missing');
+  const sample = pickRandomNodes(3);
+  console.assert(sample.length === 3, 'pickRandomNodes should return requested amount');
+}
+runSelfTests();
+
+/* animation loop */
+let last = performance.now();
+function animate(){
+  const now = performance.now(); const dt = (now-last)/1000; last=now;
+  bgUniforms.uTime.value = now/1000; bgUniforms.uAspect.value = (document.querySelector('.center-panel').clientWidth/document.querySelector('.center-panel').clientHeight) || 1;
+
+  // holograms behaviour
+  for(let i=holograms.length-1;i>=0;i--){
+    const h=holograms[i];
+    h.userData.life += dt;
+    if(h.userData.state==='fly'){
+      const tpos = h.userData.target;
+      h.position.lerp(tpos, Math.min(1, dt*2.4));
+      h.rotation.z += dt*1.2;
+      if(h.position.distanceTo(tpos) < 0.12 || h.userData.life>2.0){
+        // explode into bits
+        const nodesTarget = pickRandomNodes(2);
+        for(let b=0;b<40;b++){
+          const targetNode = nodesTarget[b % nodesTarget.length]; // равномерно распределяем цифры по двум узлам
+          spawnBitFrom(h.position.clone(), h.userData.mode, targetNode);
+        }
+
+        root.remove(h);
+        holograms.splice(i,1);
+      }
+    }
+  }
+
+  // bits simulation
+  for(let i=bits.length-1;i>=0;i--){
+    const B=bits[i];
+    B.life += dt;
+    // дольше фаза разлёта, чтобы цифры успевали "повисеть" в воздухе
+    if(B.phase==='scatter' && B.life>1.0){
+      // переходим в фазу сбора к узлам: reset локального таймера для ease‑in
+      B.phase = 'gather';
+      B.gatherT = 0;
+    }
+    if(B.phase==='scatter'){
+      B.mesh.position.add(B.vel);
+      // лёгкое затухание скорости, чтобы цифры разлетались веером и постепенно замедлялись
+      B.vel.multiplyScalar(0.985);
+      B.mesh.rotation.z += 0.6*dt; // только 2D‑вращение в плоскости экрана
+    } else {
+      const to = B.target.mesh.position;
+      const dir = tmpVec3.subVectors(to, B.mesh.position);
+      const dist = dir.length();
+      // как только цифра визуально входит в узел — поднимаем мишень над этим узлом
+      if (dist < 0.3) {
+        spawnReticleOnNode(B.target);
+      }
+      // увеличиваем максимально возможное время жизни бита
+      if(dist<0.16 || B.life>4.0){
+        B.target.heat = Math.min(B.target.heat + 0.15, 2.0);
+        root.remove(B.mesh);
+        bits.splice(i,1);
+        continue;
+      }
+      dir.normalize();
+
+      // ease‑in к узлу: сначала медленно, затем всё быстрее
+      B.gatherT = (B.gatherT || 0) + dt/0.7; // ~0.7s полный цикл сжатия
+      const tPhase = Math.min(B.gatherT, 1.0);
+      const ease = tPhase * tPhase; // квадратичный ease‑in
+
+      const baseSpeed = 0.008;
+      const speed = (baseSpeed + 0.045*ease) * (1.0 + 0.3*B.mode);
+      B.mesh.position.addScaledVector(dir, speed);
+
+      // параллельно уменьшаем размер цифры — эффект "схлопывания" в узел
+      const baseScale = 1.0;
+      const shrink = 1.0 - 0.55*ease;
+      const s = Math.max(0.3, baseScale * shrink);
+      B.mesh.scale.setScalar(s);
+
+      B.mesh.rotation.z += 0.8*dt; // только 2D‑вращение в плоскости экрана
+    }
+  }
+
+  // node pulsing + reactive floating
+  const time = now / 1000;
+  for(const n of nodes){
+    // накопленный "ресурс жара" от битов и мишеней медленно остывает
+    n.heat = Math.max(0, n.heat * 0.96);
+    n.heat = Math.min(n.heat, 2.0);
+
+    // сглаживаем визуальный отклик, чтобы нода не дёргалась
+    const targetHeat = n.heat;
+    n.visualHeat += (targetHeat - n.visualHeat) * 0.18; // плавная интерполяция
+
+    const pulse = 1.0 + 0.06*Math.sin(time*2.8 + n.phase);
+    const baseScale = 1.0;
+    const heatScale = 1.0 + n.visualHeat*0.7;
+    const finalScale = baseScale * heatScale * pulse;
+    n.mesh.scale.set(finalScale,finalScale,finalScale);
+
+    // лёгкое "дыхание" позиции без рывков: амплитуда почти не зависит от нагрева
+    const ampBase = 0.06;
+    const amp = ampBase + n.visualHeat*0.12;
+    const offsetX = Math.sin(time*1.0 + n.floatPhaseX) * amp;
+    const offsetY = Math.cos(time*0.85 + n.floatPhaseY) * amp;
+    n.mesh.position.set(
+      n.base.x + offsetX,
+      n.base.y + offsetY,
+      n.base.z
+    );
+
+    // лёгкое усиление свечения от "нагрева"
+    const mat = n.mesh.material;
+    mat.emissiveIntensity = 1.2 + n.visualHeat*0.9;
+  }
+
+  // update edge positions to follow moving nodes
+  let ptr = 0;
+  for(const pair of edgePairs){
+    const a = nodes[pair[0]].mesh.position;
+    const b = nodes[pair[1]].mesh.position;
+    edgePositions[ptr++] = a.x;
+    edgePositions[ptr++] = a.y;
+    edgePositions[ptr++] = a.z;
+    edgePositions[ptr++] = b.x;
+    edgePositions[ptr++] = b.y;
+    edgePositions[ptr++] = b.z;
+  }
+  edgeGeo.attributes.position.needsUpdate = true;
+
+
+
+  // reticles: многофазная механика — захват узла → полёт → фиксация → затухание
+  for (const r of reticles) {
+    const ud = r.userData;
+
+    // Фаза плавного исчезновения после следующего выстрела
+    if (ud.phase === 'fade') {
+      if (ud.fade == null) ud.fade = 1;
+      ud.fade -= dt * 2.0;
+      const k = Math.max(ud.fade, 0);
+      const s = 0.9 * k;
+      r.scale.set(s, s, s);
+      r.position.z += dt * 0.4;
+
+      if (ud.domEl) {
+        ud.domEl.classList.remove('active');
+      }
+
+      if (ud.fade <= 0) {
+        r.visible = false;
+        ud.phase = 'idle';
+        ud.anchorNode = null;
+        ud.sliding = null;
+        if (ud.targetEl) {
+          ud.targetEl.classList.remove('hit');
+          ud.targetEl = null;
+        }
+      }
+      continue;
+    }
+
+    // Фаза фиксации на подозреваемом — мишень "прилипла" к карточке
+    if (ud.phase === 'pinned' && ud.targetEl) {
+      const dom = ud.domEl;
+      if (dom) {
+        const rect = ud.targetEl.getBoundingClientRect();
+        const frameRect = frameEl.getBoundingClientRect();
+        const cx = rect.left + rect.width/2 - frameRect.left;
+        const cy = rect.top + rect.height/2 - frameRect.top;
+        dom.style.left = cx + 'px';
+        dom.style.top = cy + 'px';
+        dom.classList.add('active');
+      }
+      r.visible = false;
+      continue;
+    }
+
+    if (!r.visible) continue;
+
+    // Фаза полёта к подозреваемому
+    if (ud.phase === 'travel' && ud.sliding) {
+      if (ud.domEl) {
+        ud.domEl.classList.remove('active');
+      }
+      r.visible = true;
+      const sld = ud.sliding;
+      sld.progress = Math.min(1, sld.progress + dt * 1.1);
+      r.position.lerpVectors(sld.from, sld.to, sld.progress);
+
+      // лёгкий дрейф по глубине для ощущения голограммы
+      const wobble = 0.06 * Math.sin(time*5.0 + sld.progress*6.283);
+      r.position.z = 0.06 + wobble * 0.15;
+
+      const travelScale = 0.9 + 0.2*Math.sin(time*8.0);
+      r.scale.set(travelScale, travelScale, travelScale);
+
+      if (sld.progress >= 1.0) {
+        // мишень зафиксировалась на подозреваемом до следующего выстрела
+        ud.phase = 'pinned';
+        ud.sliding = null;
+        ud.t = 0;
+        const el = ud.targetEl;
+        pulseTarget(el)
+      }
+      continue;
+    }
+
+    // Фаза "захвата" узла графа: мишень дышит и следует за плавающей нодой
+    if (ud.phase === 'lock' && ud.anchorNode) {
+      if (ud.domEl) {
+        ud.domEl.classList.remove('active');
+      }
+      r.visible = true;
+      const p = ud.anchorNode.mesh.position;
+      r.position.set(p.x, p.y, 0.05);
+
+      ud.spawn = Math.min(1, ud.spawn + dt * 4.0);
+      ud.t += dt;
+
+      const baseScale = 0.9;
+      const pulse = 1.0 + 0.15*Math.sin(time*6.0 + ud.t*4.0);
+      const s = baseScale * (0.4 + 0.6*ud.spawn) * pulse;
+      r.scale.set(s, s, s);
+
+      // после небольшой задержки мишень выбирает одну из правых иконок
+      if (ud.t > 1.1) {
+        const domTargets = Array.from(document.querySelectorAll('.target-icon'));
+        if (domTargets.length) {
+          const choice = domTargets[Math.floor(Math.random() * domTargets.length)];
+          const world = domToWorld(choice);
+          ud.targetEl = choice;
+          ud.sliding = {
+            from: r.position.clone(),
+            to: new THREE.Vector3(world.x, world.y, 0.06),
+            progress: 0
+          };
+          ud.phase = 'travel';
+        }
+      }
+      continue;
+    }
+  }
+
+  renderer.render(scene, camera);
+  requestAnimationFrame(animate);
+}
+requestAnimationFrame(animate);
+
+// initial resize
+setTimeout(resize,100);
+</script>
+</body>
+</html>
