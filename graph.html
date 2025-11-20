@@ -1,0 +1,1139 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Графовые модели данных криминалистического пайплайна</title>
+    <style>
+        :root {
+            --person: #3498db;
+            --group: #9b59b6;
+            --org: #8e44ad;
+            --utterance: #2ecc71;
+            --text: #27ae60;
+            --video: #1abc9c;
+            --entity: #e67e22;
+            --concept: #d35400;
+            --legal: #e74c3c;
+            --edge-comm: #3498db;
+            --edge-time: #9b59b6;
+            --edge-semantic: #2ecc71;
+            --edge-entity: #e67e22;
+            --edge-topic: #f1c40f;
+            --edge-legal: #e74c3c;
+            --edge-emotion: #e91e63;
+            --edge-behavior: #673ab7;
+        }
+        ::-webkit-scrollbar {width: 0;}
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #1a2a3a, #2c3e50);
+            color: #ecf0f1;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        header {
+            text-align: center;
+            padding: 2rem 0;
+            margin-bottom: 2rem;
+        }
+        
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+            background: linear-gradient(90deg, #3498db, #2ecc71);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+        
+        .subtitle {
+            font-size: 1.2rem;
+            opacity: 0.9;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .main-content {
+            display: flex;
+            gap: 2rem;
+            flex-wrap: wrap;
+        }
+        
+        .graph-container {
+            flex: 1;
+            min-width: 800px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .legend {
+            flex: 0 0 300px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .legend h2 {
+            margin-bottom: 1.5rem;
+            color: #3498db;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 0.5rem;
+        }
+        
+        .legend-section {
+            margin-bottom: 1.5rem;
+        }
+        
+        .legend-section h3 {
+            margin-bottom: 0.8rem;
+            font-size: 1.1rem;
+            color: #2ecc71;
+        }
+        
+        .legend-items {
+            display: flex;
+            flex-direction: column;
+            gap: 0.7rem;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            padding: 0.5rem;
+            border-radius: 6px;
+            transition: background 0.3s;
+        }
+        
+        .legend-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+        
+        .node-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+        }
+        
+        .edge-color {
+            width: 40px;
+            height: 3px;
+            border-radius: 2px;
+        }
+        
+        .controls {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+        
+        .layer-controls {
+            display: flex;
+            gap: 1rem;
+        }
+        
+        .control-btn {
+            background: rgba(52, 152, 219, 0.2);
+            border: 1px solid rgba(52, 152, 219, 0.5);
+            color: #ecf0f1;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .control-btn:hover {
+            background: rgba(52, 152, 219, 0.4);
+        }
+        
+        .control-btn.active {
+            background: rgba(52, 152, 219, 0.7);
+            border-color: #3498db;
+        }
+        
+        .info-panel {
+            margin-top: 2rem;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .info-panel h2 {
+            margin-bottom: 1rem;
+            color: #3498db;
+        }
+        
+        .info-content {
+            display: none;
+        }
+        
+        .info-content.active {
+            display: block;
+        }
+        
+        .node-info, .edge-info {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
+        
+        .node-info h3, .edge-info h3 {
+            color: #2ecc71;
+            margin-bottom: 0.5rem;
+        }
+        
+        .node-details, .edge-details {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+        }
+        
+        .detail-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.3rem 0;
+            border-bottom: 1px dashed rgba(255, 255, 255, 0.1);
+        }
+        
+        .detail-label {
+            font-weight: bold;
+            color: #bdc3c7;
+        }
+        
+        /* Графовые элементы */
+        .graph-svg {
+            width: 100%;
+            height: 600px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+        }
+        
+        .node {
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .node:hover {
+            filter: brightness(1.2);
+            transform: scale(1.05);
+        }
+        
+        .node.person {
+            fill: var(--person);
+        }
+        
+        .node.group {
+            fill: var(--group);
+        }
+        
+        .node.org {
+            fill: var(--org);
+        }
+        
+        .node.utterance {
+            fill: var(--utterance);
+        }
+        
+        .node.text {
+            fill: var(--text);
+        }
+        
+        .node.video {
+            fill: var(--video);
+        }
+        
+        .node.entity {
+            fill: var(--entity);
+        }
+        
+        .node.concept {
+            fill: var(--concept);
+        }
+        
+        .node.legal {
+            fill: var(--legal);
+        }
+        
+        .edge {
+            stroke-width: 2;
+            cursor: pointer;
+        }
+        
+        .edge.communication {
+            stroke: var(--edge-comm);
+        }
+        
+        .edge.temporal {
+            stroke: var(--edge-time);
+        }
+        
+        .edge.semantic {
+            stroke: var(--edge-semantic);
+        }
+        
+        .edge.entity {
+            stroke: var(--edge-entity);
+        }
+        
+        .edge.topic {
+            stroke: var(--edge-topic);
+        }
+        
+        .edge.legal {
+            stroke: var(--edge-legal);
+        }
+        
+        .edge.emotion {
+            stroke: var(--edge-emotion);
+        }
+        
+        .edge.behavior {
+            stroke: var(--edge-behavior);
+        }
+        
+        .node-label {
+            font-size: 12px;
+            font-weight: bold;
+            fill: white;
+            text-anchor: middle;
+            pointer-events: none;
+            user-select: none;
+        }
+        
+        .edge-label {
+            font-size: 10px;
+            fill: #ecf0f1;
+            text-anchor: middle;
+            pointer-events: none;
+            user-select: none;
+        }
+        
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% {
+                r: 8;
+                opacity: 1;
+            }
+            50% {
+                r: 12;
+                opacity: 0.7;
+            }
+            100% {
+                r: 8;
+                opacity: 1;
+            }
+        }
+        
+        .equation-section {
+            margin-top: 2rem;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .equation-section h2 {
+            color: #3498db;
+            margin-bottom: 1.5rem;
+            text-align: center;
+        }
+        
+        .equation {
+            font-family: 'Courier New', monospace;
+            font-size: 1.4rem;
+            text-align: center;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin-bottom: 1.5rem;
+            border-left: 4px solid #3498db;
+        }
+        
+        .equation-explanation {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 1.5rem;
+            border-radius: 8px;
+        }
+        
+        .equation-explanation h3 {
+            color: #2ecc71;
+            margin-bottom: 1rem;
+        }
+        
+        .explanation-steps {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1rem;
+        }
+        
+        .explanation-step {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 1rem;
+            border-radius: 6px;
+            border-left: 3px solid #3498db;
+        }
+        
+        .explanation-step h4 {
+            margin-bottom: 0.5rem;
+            color: #3498db;
+        }
+        
+        @media (max-width: 1100px) {
+            .main-content {
+                flex-direction: column;
+            }
+            
+            .graph-container {
+                min-width: 100%;
+            }
+            
+            .legend {
+                flex: 0 0 auto;
+            }
+            
+            .explanation-steps {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Графовые модели данных криминалистического пайплайна</h1>
+            <p class="subtitle">Многослойный граф, представляющий различные аспекты анализируемой ситуации: акторы, контент, сущности, смыслы и правовые нормы</p>
+        </header>
+        
+        <div class="controls">
+            <div class="layer-controls">
+                <button class="control-btn active" data-layer="all">Все слои</button>
+                <button class="control-btn" data-layer="actors">Акторы</button>
+                <button class="control-btn" data-layer="content">Контент</button>
+                <button class="control-btn" data-layer="semantic">Семантика</button>
+                <button class="control-btn" data-layer="legal">Правовые нормы</button>
+            </div>
+            <div>
+                <button class="control-btn" id="reset-view">Сброс вида</button>
+                <button class="control-btn" id="show-real-time">Режим реального времени</button>
+            </div>
+        </div>
+        
+        <div class="main-content">
+            <div class="graph-container">
+                <svg class="graph-svg" viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+                    <!-- Временные связи -->
+                    <path class="edge temporal" d="M150,250 L300,150" />
+                    <path class="edge temporal" d="M300,150 L450,200" />
+                    <path class="edge temporal" d="M450,200 L600,150" />
+                    
+                    <!-- Коммуникационные связи -->
+                    <path class="edge communication" d="M150,250 L150,400" />
+                    <path class="edge communication" d="M150,400 L300,500" />
+                    <path class="edge communication" d="M300,500 L450,400" />
+                    <path class="edge communication" d="M450,400 L600,500" />
+                    
+                    <!-- Семантические связи -->
+                    <path class="edge semantic" d="M300,150 L400,350" />
+                    <path class="edge semantic" d="M450,200 L400,350" />
+                    <path class="edge semantic" d="M600,150 L750,250" />
+                    
+                    <!-- Связи сущностей -->
+                    <path class="edge entity" d="M400,350 L600,350" />
+                    <path class="edge entity" d="M600,350 L800,300" />
+                    
+                    <!-- Тематические связи -->
+                    <path class="edge topic" d="M600,350 L750,500" />
+                    <path class="edge topic" d="M750,500 L950,450" />
+                    
+                    <!-- Правовые связи -->
+                    <path class="edge legal" d="M750,250 L900,300" />
+                    <path class="edge legal" d="M900,300 L950,450" />
+                    
+                    <!-- Эмоциональные связи -->
+                    <path class="edge emotion" d="M150,400 L300,350" />
+                    <path class="edge emotion" d="M300,350 L450,300" />
+                    
+                    <!-- Поведенческие связи -->
+                    <path class="edge behavior" d="M300,500 L450,600" />
+                    <path class="edge behavior" d="M450,600 L600,500" />
+                    
+                    <!-- Узлы-акторы -->
+                    <g class="node person" data-id="person1" data-type="person">
+                        <circle cx="150" cy="250" r="10" />
+                        <text class="node-label" x="150" y="280">Персона_1</text>
+                    </g>
+                    
+                    <g class="node person" data-id="person2" data-type="person">
+                        <circle cx="300" cy="500" r="10" />
+                        <text class="node-label" x="300" y="530">Персона_2</text>
+                    </g>
+                    
+                    <g class="node group" data-id="group1" data-type="group">
+                        <circle cx="150" cy="400" r="10" />
+                        <text class="node-label" x="150" y="430">Группа_1</text>
+                    </g>
+                    
+                    <g class="node org" data-id="org1" data-type="org">
+                        <circle cx="450" cy="400" r="10" />
+                        <text class="node-label" x="450" y="430">Организация_1</text>
+                    </g>
+                    
+                    <!-- Узлы-контент -->
+                    <g class="node utterance" data-id="utterance1" data-type="utterance">
+                        <circle cx="300" cy="150" r="10" />
+                        <text class="node-label" x="300" y="180">Высказывание_1</text>
+                    </g>
+                    
+                    <g class="node utterance" data-id="utterance2" data-type="utterance">
+                        <circle cx="450" cy="200" r="10" />
+                        <text class="node-label" x="450" y="230">Высказывание_2</text>
+                    </g>
+                    
+                    <g class="node text" data-id="text1" data-type="text">
+                        <circle cx="600" cy="150" r="10" />
+                        <text class="node-label" x="600" y="180">Текст_1</text>
+                    </g>
+                    
+                    <g class="node video" data-id="video1" data-type="video">
+                        <circle cx="600" cy="500" r="10" />
+                        <text class="node-label" x="600" y="530">Видео_1</text>
+                    </g>
+                    
+                    <!-- Узлы-сущности -->
+                    <g class="node entity" data-id="entity1" data-type="entity">
+                        <circle cx="400" cy="350" r="10" />
+                        <text class="node-label" x="400" y="380">Сущность_1</text>
+                    </g>
+                    
+                    <g class="node entity" data-id="entity2" data-type="entity">
+                        <circle cx="600" cy="350" r="10" />
+                        <text class="node-label" x="600" y="380">Сущность_2</text>
+                    </g>
+                    
+                    <g class="node entity" data-id="entity3" data-type="entity">
+                        <circle cx="800" cy="300" r="10" />
+                        <text class="node-label" x="800" y="330">Сущность_3</text>
+                    </g>
+                    
+                    <!-- Узлы-смыслы -->
+                    <g class="node concept" data-id="concept1" data-type="concept">
+                        <circle cx="750" cy="500" r="10" />
+                        <text class="node-label" x="750" y="530">Концепт_1</text>
+                    </g>
+                    
+                    <g class="node concept" data-id="concept2" data-type="concept">
+                        <circle cx="950" cy="450" r="10" />
+                        <text class="node-label" x="950" y="480">Концепт_2</text>
+                    </g>
+                    
+                    <!-- Узлы-правовые нормы -->
+                    <g class="node legal" data-id="legal1" data-type="legal">
+                        <circle cx="750" cy="250" r="10" />
+                        <text class="node-label" x="750" y="280">Норма_1</text>
+                    </g>
+                    
+                    <g class="node legal" data-id="legal2" data-type="legal">
+                        <circle cx="900" cy="300" r="10" />
+                        <text class="node-label" x="900" y="330">Норма_2</text>
+                    </g>
+                    
+                    <!-- Подписи рёбер -->
+                    <text class="edge-label" x="220" y="190">временная</text>
+                    <text class="edge-label" x="370" y="170">временная</text>
+                    <text class="edge-label" x="520" y="170">временная</text>
+                    
+                    <text class="edge-label" x="150" y="330">коммуникация</text>
+                    <text class="edge-label" x="220" y="460">коммуникация</text>
+                    <text class="edge-label" x="370" y="460">коммуникация</text>
+                    <text class="edge-label" x="520" y="460">коммуникация</text>
+                    
+                    <text class="edge-label" x="340" y="240">семантика</text>
+                    <text class="edge-label" x="420" y="270">семантика</text>
+                    <text class="edge-label" x="670" y="200">семантика</text>
+                    
+                    <text class="edge-label" x="490" y="350">сущность</text>
+                    <text class="edge-label" x="690" y="325">сущность</text>
+                    
+                    <text class="edge-label" x="670" y="430">тематическая</text>
+                    <text class="edge-label" x="840" y="480">тематическая</text>
+                    
+                    <text class="edge-label" x="820" y="270">правовая</text>
+                    <text class="edge-label" x="920" y="380">правовая</text>
+                    
+                    <text class="edge-label" x="220" y="380">эмоциональная</text>
+                    <text class="edge-label" x="370" y="380">эмоциональная</text>
+                    
+                    <text class="edge-label" x="370" y="560">поведенческая</text>
+                    <text class="edge-label" x="520" y="560">поведенческая</text>
+                </svg>
+            </div>
+            
+            <div class="legend">
+                <h2>Легенда графа</h2>
+                
+                <div class="legend-section">
+                    <h3>Типы вершин (Узлы)</h3>
+                    <div class="legend-items">
+                        <div class="legend-item">
+                            <div class="node-color" style="background-color: var(--person);"></div>
+                            <span>Персона</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="node-color" style="background-color: var(--group);"></div>
+                            <span>Группа</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="node-color" style="background-color: var(--org);"></div>
+                            <span>Организация</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="node-color" style="background-color: var(--utterance);"></div>
+                            <span>Высказывание</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="node-color" style="background-color: var(--text);"></div>
+                            <span>Текстовое сообщение</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="node-color" style="background-color: var(--video);"></div>
+                            <span>Видеофрагмент</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="node-color" style="background-color: var(--entity);"></div>
+                            <span>Сущность</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="node-color" style="background-color: var(--concept);"></div>
+                            <span>Концепт/Тема</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="node-color" style="background-color: var(--legal);"></div>
+                            <span>Правовая норма</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="legend-section">
+                    <h3>Типы рёбер (Связи)</h3>
+                    <div class="legend-items">
+                        <div class="legend-item">
+                            <div class="edge-color" style="background-color: var(--edge-comm);"></div>
+                            <span>Коммуникационные связи</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="edge-color" style="background-color: var(--edge-time);"></div>
+                            <span>Временные последовательности</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="edge-color" style="background-color: var(--edge-semantic);"></div>
+                            <span>Семантические отношения</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="edge-color" style="background-color: var(--edge-entity);"></div>
+                            <span>Упоминания сущностей</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="edge-color" style="background-color: var(--edge-topic);"></div>
+                            <span>Принадлежность к темам</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="edge-color" style="background-color: var(--edge-legal);"></div>
+                            <span>Соответствия нормам</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="edge-color" style="background-color: var(--edge-emotion);"></div>
+                            <span>Эмоциональные паттерны</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="edge-color" style="background-color: var(--edge-behavior);"></div>
+                            <span>Поведенческие связи</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="equation-section">
+            <h2 style="color:white;">Уравнение криминалистического пайплайна</h2>
+            <div class="equation">
+                C<sub>t</sub> = Φ<sub>dec</sub>( Q<sub>prov</sub>( L<sub>map</sub>( G<sub>build</sub>( N<sub>sem</sub>( E<sub>eng</sub>( E<sub>psy</sub>( P(D<sub>0:t</sub>) ) ) ) ) ) )
+            </div>
+            
+            <div class="equation-explanation">
+                <h3>Как работает уравнение пайплайна</h3>
+                <p>Это уравнение описывает полный процесс преобразования сырых данных в криминалистически значимые выводы через последовательность преобразований графа:</p>
+                
+                <div class="explanation-steps">
+                    <div class="explanation-step">
+                        <h4>P(D<sub>0:t</sub>) - Предобработка</h4>
+                        <p>Нормализация и сегментация сырых данных (видео, аудио, текст) в структурированные элементы графа</p>
+                    </div>
+                    
+                    <div class="explanation-step">
+                        <h4>E<sub>psy</sub> - Психоэмоциональный анализ</h4>
+                        <p>Распознавание эмоциональных состояний по голосу и видеоданным, добавление эмоциональных признаков к узлам графа</p>
+                    </div>
+                    
+                    <div class="explanation-step">
+                        <h4>E<sub>eng</sub> - Анализ вовлечённости</h4>
+                        <p>Оценка поведенческих паттернов, уровня внимания и социальных ролей участников</p>
+                    </div>
+                    
+                    <div class="explanation-step">
+                        <h4>N<sub>sem</sub> - Семантический анализ</h4>
+                        <p>Извлечение сущностей, тем и смыслов из текстового контента, построение семантических связей</p>
+                    </div>
+                    
+                    <div class="explanation-step">
+                        <h4>G<sub>build</sub> - Построение графа</h4>
+                        <p>Интеграция всех данных в единую многослойную графовую модель с различными типами узлов и связей</p>
+                    </div>
+                    
+                    <div class="explanation-step">
+                        <h4>L<sub>map</sub> - Юридическое сопоставление</h4>
+                        <p>Сопоставление элементов графа с правовыми нормами, поиск паттернов, соответствующих составам преступлений</p>
+                    </div>
+                    
+                    <div class="explanation-step">
+                        <h4>Q<sub>prov</sub> - Учёт происхождения</h4>
+                        <p>Оценка качества и достоверности данных, проверка цепочки происхождения доказательств</p>
+                    </div>
+                    
+                    <div class="explanation-step">
+                        <h4>Φ<sub>dec</sub> - Криминалистический вывод</h4>
+                        <p>Формирование окончательных выводов на основе анализа графовых структур и выявленных паттернов</p>
+                    </div>
+                </div>
+                
+                <p style="margin-top: 1.5rem; font-style: italic;">Каждый этап добавляет новый слой информации к графу, постепенно преобразуя сырые данные в структурированное криминалистическое знание, пригодное для принятия решений.</p>
+            </div>
+        </div>
+        
+        <div class="info-panel">
+            <h2>Детальная информация</h2>
+            <div class="info-content active" id="default-info">
+                <p>Выберите узел или связь в графе для просмотра детальной информации.</p>
+            </div>
+            
+            <div class="info-content" id="node-info">
+                <div class="node-info">
+                    <h3 id="node-title">Узел графа</h3>
+                    <div class="node-details">
+                        <div class="detail-item">
+                            <span class="detail-label">Тип:</span>
+                            <span id="node-type">-</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">ID:</span>
+                            <span id="node-id">-</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Вероятность:</span>
+                            <span id="node-confidence">-</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Временная метка:</span>
+                            <span id="node-timestamp">-</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Источник данных:</span>
+                            <span id="node-source">-</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Модель распознавания:</span>
+                            <span id="node-model">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="info-content" id="edge-info">
+                <div class="edge-info">
+                    <h3 id="edge-title">Связь графа</h3>
+                    <div class="edge-details">
+                        <div class="detail-item">
+                            <span class="detail-label">Тип:</span>
+                            <span id="edge-type">-</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Источник:</span>
+                            <span id="edge-source">-</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Цель:</span>
+                            <span id="edge-target">-</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Вес связи:</span>
+                            <span id="edge-weight">-</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Направление:</span>
+                            <span id="edge-direction">-</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Временной интервал:</span>
+                            <span id="edge-interval">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const nodes = document.querySelectorAll('.node');
+            const edges = document.querySelectorAll('.edge');
+            const controlBtns = document.querySelectorAll('.control-btn');
+            const resetBtn = document.getElementById('reset-view');
+            const realTimeBtn = document.getElementById('show-real-time');
+            const defaultInfo = document.getElementById('default-info');
+            const nodeInfo = document.getElementById('node-info');
+            const edgeInfo = document.getElementById('edge-info');
+            
+            // Данные для узлов
+            const nodeData = {
+                person1: {
+                    type: 'Персона',
+                    id: 'персона_001',
+                    confidence: '0.95',
+                    timestamp: '2023-10-15 14:30:22',
+                    source: 'Видео поток #3',
+                    model: 'FaceNet + DeepSort'
+                },
+                person2: {
+                    type: 'Персона',
+                    id: 'персона_002',
+                    confidence: '0.87',
+                    timestamp: '2023-10-15 14:32:10',
+                    source: 'Видео поток #3',
+                    model: 'FaceNet + DeepSort'
+                },
+                group1: {
+                    type: 'Группа',
+                    id: 'группа_001',
+                    confidence: '0.92',
+                    timestamp: '2023-10-15 14:25:00',
+                    source: 'Telegram чат "Обсуждение"',
+                    model: 'Community Detection'
+                },
+                org1: {
+                    type: 'Организация',
+                    id: 'организация_001',
+                    confidence: '0.78',
+                    timestamp: '2023-10-14 09:15:33',
+                    source: 'Баз данных юридических лиц',
+                    model: 'Entity Linking'
+                },
+                utterance1: {
+                    type: 'Высказывание',
+                    id: 'высказывание_001',
+                    confidence: '0.91',
+                    timestamp: '2023-10-15 14:30:45',
+                    source: 'Аудио поток #2',
+                    model: 'ASR (Whisper)'
+                },
+                utterance2: {
+                    type: 'Высказывание',
+                    id: 'высказывание_002',
+                    confidence: '0.88',
+                    timestamp: '2023-10-15 14:31:20',
+                    source: 'Аудио поток #2',
+                    model: 'ASR (Whisper)'
+                },
+                text1: {
+                    type: 'Текст',
+                    id: 'текст_001',
+                    confidence: '0.96',
+                    timestamp: '2023-10-15 14:29:15',
+                    source: 'Telegram сообщение',
+                    model: 'Text Normalization'
+                },
+                video1: {
+                    type: 'Видеофрагмент',
+                    id: 'видео_001',
+                    confidence: '0.94',
+                    timestamp: '2023-10-15 14:33:05',
+                    source: 'Видео поток #1',
+                    model: 'Shot Boundary Detection'
+                },
+                entity1: {
+                    type: 'Сущность',
+                    id: 'сущность_001',
+                    confidence: '0.89',
+                    timestamp: '2023-10-15 14:31:30',
+                    source: 'Текст сообщения',
+                    model: 'NER (spaCy)'
+                },
+                entity2: {
+                    type: 'Сущность',
+                    id: 'сущность_002',
+                    confidence: '0.85',
+                    timestamp: '2023-10-15 14:32:45',
+                    source: 'Текст сообщения',
+                    model: 'NER (spaCy)'
+                },
+                entity3: {
+                    type: 'Сущность',
+                    id: 'сущность_003',
+                    confidence: '0.92',
+                    timestamp: '2023-10-15 14:33:20',
+                    source: 'Текст сообщения',
+                    model: 'NER (spaCy)'
+                },
+                concept1: {
+                    type: 'Концепт',
+                    id: 'концепт_001',
+                    confidence: '0.76',
+                    timestamp: '2023-10-15 14:31:50',
+                    source: 'Тематическое моделирование',
+                    model: 'BERTopic'
+                },
+                concept2: {
+                    type: 'Концепт',
+                    id: 'концепт_002',
+                    confidence: '0.81',
+                    timestamp: '2023-10-15 14:33:40',
+                    source: 'Тематическое моделирование',
+                    model: 'BERTopic'
+                },
+                legal1: {
+                    type: 'Правовая норма',
+                    id: 'норма_001',
+                    confidence: '0.72',
+                    timestamp: '2023-10-15 14:32:30',
+                    source: 'Уголовный кодекс РФ',
+                    model: 'Legal Pattern Matching'
+                },
+                legal2: {
+                    type: 'Правовая норма',
+                    id: 'норма_002',
+                    confidence: '0.68',
+                    timestamp: '2023-10-15 14:34:10',
+                    source: 'Уголовный кодекс РФ',
+                    model: 'Legal Pattern Matching'
+                }
+            };
+            
+            // Данные для связей
+            const edgeData = {
+                'M150,250 L300,150': {
+                    type: 'Временная последовательность',
+                    source: 'Персона_1',
+                    target: 'Высказывание_1',
+                    weight: '0.89',
+                    direction: 'Прямая',
+                    interval: '15 сек'
+                },
+                'M300,150 L450,200': {
+                    type: 'Временная последовательность',
+                    source: 'Высказывание_1',
+                    target: 'Высказывание_2',
+                    weight: '0.92',
+                    direction: 'Прямая',
+                    interval: '35 сек'
+                },
+                'M150,250 L150,400': {
+                    type: 'Коммуникационная связь',
+                    source: 'Персона_1',
+                    target: 'Группа_1',
+                    weight: '0.85',
+                    direction: 'Двусторонняя',
+                    interval: 'Постоянная'
+                }
+            };
+            
+            // Обработчики для узлов
+            nodes.forEach(node => {
+                node.addEventListener('click', function() {
+                    const nodeId = this.getAttribute('data-id');
+                    const nodeType = this.getAttribute('data-type');
+                    
+                    // Обновляем информацию о узле
+                    document.getElementById('node-title').textContent = `${nodeData[nodeId].type}: ${nodeId}`;
+                    document.getElementById('node-type').textContent = nodeData[nodeId].type;
+                    document.getElementById('node-id').textContent = nodeData[nodeId].id;
+                    document.getElementById('node-confidence').textContent = nodeData[nodeId].confidence;
+                    document.getElementById('node-timestamp').textContent = nodeData[nodeId].timestamp;
+                    document.getElementById('node-source').textContent = nodeData[nodeId].source;
+                    document.getElementById('node-model').textContent = nodeData[nodeId].model;
+                    
+                    // Показываем информацию о узле
+                    defaultInfo.classList.remove('active');
+                    edgeInfo.classList.remove('active');
+                    nodeInfo.classList.add('active');
+                    
+                    // Подсвечиваем выбранный узел
+                    nodes.forEach(n => n.classList.remove('pulse'));
+                    this.classList.add('pulse');
+                });
+            });
+            
+            // Обработчики для связей
+            edges.forEach(edge => {
+                edge.addEventListener('click', function() {
+                    const pathData = this.getAttribute('d');
+                    
+                    // Обновляем информацию о связи
+                    if (edgeData[pathData]) {
+                        document.getElementById('edge-title').textContent = `Связь: ${edgeData[pathData].type}`;
+                        document.getElementById('edge-type').textContent = edgeData[pathData].type;
+                        document.getElementById('edge-source').textContent = edgeData[pathData].source;
+                        document.getElementById('edge-target').textContent = edgeData[pathData].target;
+                        document.getElementById('edge-weight').textContent = edgeData[pathData].weight;
+                        document.getElementById('edge-direction').textContent = edgeData[pathData].direction;
+                        document.getElementById('edge-interval').textContent = edgeData[pathData].interval;
+                    } else {
+                        document.getElementById('edge-title').textContent = 'Связь графа';
+                        document.getElementById('edge-type').textContent = 'Общий тип связи';
+                        document.getElementById('edge-source').textContent = 'Узел источника';
+                        document.getElementById('edge-target').textContent = 'Узел назначения';
+                        document.getElementById('edge-weight').textContent = '0.75';
+                        document.getElementById('edge-direction').textContent = 'Прямая';
+                        document.getElementById('edge-interval').textContent = 'Переменный';
+                    }
+                    
+                    // Показываем информацию о связи
+                    defaultInfo.classList.remove('active');
+                    nodeInfo.classList.remove('active');
+                    edgeInfo.classList.add('active');
+                    
+                    // Подсвечиваем выбранную связь
+                    edges.forEach(e => e.style.strokeWidth = '2');
+                    this.style.strokeWidth = '4';
+                });
+            });
+            
+            // Обработчики для кнопок управления слоями
+            controlBtns.forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const layer = this.getAttribute('data-layer');
+                    
+                    // Обновляем активную кнопку
+                    controlBtns.forEach(b => b.classList.remove('active'));
+                    this.classList.add('active');
+                    
+                    // Показываем/скрываем элементы в зависимости от выбранного слоя
+                    if (layer === 'all') {
+                        nodes.forEach(node => node.style.display = '');
+                        edges.forEach(edge => edge.style.display = '');
+                    } else {
+                        nodes.forEach(node => {
+                            if (node.getAttribute('data-type') === layer || 
+                                (layer === 'actors' && ['person', 'group', 'org'].includes(node.getAttribute('data-type'))) ||
+                                (layer === 'content' && ['utterance', 'text', 'video'].includes(node.getAttribute('data-type'))) ||
+                                (layer === 'semantic' && ['entity', 'concept'].includes(node.getAttribute('data-type'))) ||
+                                (layer === 'legal' && ['legal'].includes(node.getAttribute('data-type')))) {
+                                node.style.display = '';
+                            } else {
+                                node.style.display = 'none';
+                            }
+                        });
+                        
+                        // Для простоты скрываем все связи при фильтрации
+                        // В реальной системе это было бы более сложным
+                        if (layer !== 'all') {
+                            edges.forEach(edge => edge.style.display = 'none');
+                        } else {
+                            edges.forEach(edge => edge.style.display = '');
+                        }
+                    }
+                });
+            });
+            
+            // Обработчик для кнопки сброса
+            resetBtn.addEventListener('click', function() {
+                // Сбрасываем фильтры
+                controlBtns.forEach(btn => {
+                    if (btn.getAttribute('data-layer') === 'all') {
+                        btn.classList.add('active');
+                    } else {
+                        btn.classList.remove('active');
+                    }
+                });
+                
+                // Показываем все элементы
+                nodes.forEach(node => node.style.display = '');
+                edges.forEach(edge => {
+                    edge.style.display = '';
+                    edge.style.strokeWidth = '2';
+                });
+                
+                // Убираем подсветку
+                nodes.forEach(node => node.classList.remove('pulse'));
+                
+                // Сбрасываем информацию
+                defaultInfo.classList.add('active');
+                nodeInfo.classList.remove('active');
+                edgeInfo.classList.remove('active');
+            });
+            
+            // Обработчик для кнопки реального времени
+            realTimeBtn.addEventListener('click', function() {
+                alert('Режим реального времени активирован. Граф будет обновляться по мере поступления новых данных.');
+                
+                // Имитация обновления в реальном времени
+                setTimeout(() => {
+                    const newNode = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                    newNode.setAttribute('class', 'node person pulse');
+                    newNode.setAttribute('data-id', 'person3');
+                    newNode.setAttribute('data-type', 'person');
+                    
+                    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                    circle.setAttribute('cx', '100');
+                    circle.setAttribute('cy', '650');
+                    circle.setAttribute('r', '10');
+                    
+                    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    text.setAttribute('class', 'node-label');
+                    text.setAttribute('x', '100');
+                    text.setAttribute('y', '675');
+                    text.textContent = 'Персона_3';
+                    
+                    newNode.appendChild(circle);
+                    newNode.appendChild(text);
+                    
+                    document.querySelector('.graph-svg').appendChild(newNode);
+                    
+                    // Добавляем обработчик для нового узла
+                    newNode.addEventListener('click', function() {
+                        alert('Новый узел в реальном времени: Персона_3');
+                    });
+                }, 1000);
+            });
+        });
+    </script>
+</body>
+</html>
