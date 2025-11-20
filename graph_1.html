@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>NLU Форензика — Графовый пайплайн</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: radial-gradient(circle at top, #f9fafb 0%, #e5e7eb 45%, #e5e7eb 100%);
+      color: #0f172a;
+      font-size: 15px;
+    }
+
+    #app {
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+
+    canvas#bg {
+      position: absolute;
+      inset: 0;
+      display: block;
+    }
+
+    #hud {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    #ui-panel {
+      position: absolute;
+      bottom: 24px;
+      right: 24px;
+      min-width: 340px;
+      max-width: 440px;
+      padding: 20px 22px;
+      border-radius: 24px;
+      backdrop-filter: blur(20px);
+      background: rgba(255, 255, 255, 0.92);
+      border: 1px solid rgba(148, 163, 184, 0.7);
+      box-shadow: 0 24px 70px rgba(15, 23, 42, 0.16);
+      font-size: 15px;
+      line-height: 1.6;
+      pointer-events: auto;
+      color: #0f172a;
+    }
+
+    #ui-panel h1 {
+      margin: 0 0 8px;
+      font-size: 18px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #020617;
+      font-weight: 800;
+    }
+
+    #ui-panel h2 {
+      margin: 4px 0 10px;
+      font-size: 16px;
+      font-weight: 700;
+      color: #1d4ed8;
+    }
+
+    #ui-panel p {
+      margin: 6px 0;
+      font-weight: 500;
+    }
+
+    #controls-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 10px 0 10px;
+    }
+
+    button {
+      padding: 9px 16px;
+      border-radius: 999px;
+      border: 1px solid rgba(129, 140, 248, 0.9);
+      background: radial-gradient(circle at top left, #3b82f6 0, #0ea5e9 45%, #1d4ed8 100%);
+      color: #f9fafb;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    button:hover { border-color: #111827; }
+    button:active { transform: translateY(1px); }
+
+    #stage-label {
+      padding: 7px 14px;
+      border-radius: 999px;
+      background: rgba(239,246,255,0.96);
+      border: 1px solid rgba(148,163,184,0.95);
+      font-size: 13px;
+      font-weight: 700;
+      white-space: nowrap;
+      color: #1e293b;
+    }
+
+    #legend {
+      margin-top: 10px;
+      border-top: 1px solid rgba(148,163,184,0.7);
+      padding-top: 10px;
+      display: grid;
+      grid-template-columns: auto 1fr;
+      grid-row-gap: 5px;
+      grid-column-gap: 10px;
+      font-size: 13px;
+      color: #374151;
+      font-weight: 600;
+    }
+
+    .legend-dot {
+      width: 11px;
+      height: 11px;
+      border-radius: 999px;
+    }
+
+    #hint {
+      position: absolute;
+      top: 16px;
+      left: 24px;
+      padding: 9px 14px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 600;
+      background: rgba(255,255,255,0.96);
+      border: 1px solid rgba(148,163,184,0.8);
+      backdrop-filter: blur(18px);
+      pointer-events: none;
+      color: #111827;
+      box-shadow: 0 10px 30px rgba(15,23,42,0.08);
+    }
+
+    .node-label {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.98);
+      border: 1px solid rgba(148,163,184,0.9);
+      font-size: 13px;
+      font-weight: 700;
+      color: #0f172a;
+      pointer-events: none;
+      white-space: nowrap;
+      box-shadow: 0 4px 10px rgba(15,23,42,0.12);
+    }
+
+    @media (max-width: 768px) {
+      #ui-panel {
+        left: 10px;
+        right: 10px;
+        bottom: 10px;
+        min-width: auto;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <canvas id="bg"></canvas>
+    <svg id="hud"></svg>
+
+    <div id="hint">
+      ЛКМ — вращение графа, колесо — зум. «Запустить пайплайн» — прогнать данные через G₀…G₄.
+    </div>
+
+    <div id="ui-panel">
+      <h1>NLU форензика</h1>
+      <h2 id="stage-title">Старт: сырые данные → G₀</h2>
+      <div id="controls-row">
+        <button id="play-btn">Запустить пайплайн</button>
+        <button id="step-btn">Шаг &raquo;</button>
+        <div id="stage-label">G₀: граф наблюдений</div>
+      </div>
+      <p id="stage-desc">
+        Сцена показывает многослойный граф: акторы, медиасегменты, сущности, смыслы и нормы закона. Частицы-«биты» летят слева направо через стадии пайплайна.
+      </p>
+      <div id="legend">
+        <div class="legend-dot" style="background:#22c55e;"></div><div>Акторы (Person / Group / Org)</div>
+        <div class="legend-dot" style="background:#38bdf8;"></div><div>Медиа / события (Utterance / Video / Action)</div>
+        <div class="legend-dot" style="background:#eab308;"></div><div>Сущности (Entity)</div>
+        <div class="legend-dot" style="background:#f97316;"></div><div>Смыслы / концепты (Concept)</div>
+        <div class="legend-dot" style="background:#f973a1;"></div><div>Правовые нормы (LegalNorm)</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Three.js и OrbitControls как глобальные скрипты, без модулей -->
+  <script src="https://unpkg.com/three@0.161.0/build/three.min.js"></script>
+  <script src="https://unpkg.com/three@0.161.0/examples/js/controls/OrbitControls.js"></script>
+
+  <script>
+    window.addEventListener('load', function () {
+      const appEl = document.getElementById('app');
+      const canvas = document.getElementById('bg');
+      const hud = document.getElementById('hud');
+
+      console.assert(canvas, '#bg canvas не найден');
+      console.assert(hud, '#hud svg не найден');
+
+      // ---------- Структура стадий пайплайна (общая для 3D и fallback) ----------
+      const stages = [
+        {
+          id: 'g0',
+          name: 'G₀: ASR + видеоаналитика',
+          short: 'G₀: граф наблюдений',
+          svgLabel: 'ASR + Видео',
+          color: '#22c55e',
+          desc: 'Сырые потоки сегментируются в Utterance / VideoSegment, связываются с Person / Group. Формируется первичный граф G₀.',
+        },
+        {
+          id: 'emo',
+          name: 'G₁: эмоции + вовлечённость',
+          short: 'G₁: психоэмо сигналы',
+          svgLabel: 'Эмоции & Вовлечённость',
+          color: '#38bdf8',
+          desc: 'Модели добавляют сигналы на вершины и рёбра: эмоциональное состояние и вовлечённость для Person→Utterance / VideoSegment.',
+        },
+        {
+          id: 'nlu',
+          name: 'G₂: NLU / семантика',
+          short: 'G₂: граф смыслов',
+          svgLabel: 'NLP / NLU',
+          color: '#eab308',
+          desc: 'NLP-слой выделяет сущности и концепты. Utterance ↔ Entity ↔ Concept собираются в семантические подграфы.',
+        },
+        {
+          id: 'legal',
+          name: 'G₃: юридическое сопоставление',
+          short: 'G₃: правовые связи',
+          svgLabel: 'Legal mapping',
+          color: '#f97316',
+          desc: 'Правовой модуль сопоставляет концепты и объекты с LegalNorm_l и Scenario_s. Ищутся подграфы, похожие на составы преступлений.',
+        },
+        {
+          id: 'risk',
+          name: 'G₄: агрегация риска',
+          short: 'G₄: граф гипотез',
+          svgLabel: 'Агрегация риска',
+          color: '#f973a1',
+          desc: 'Подграфы-сценарии ранжируются по качеству доказательств и структурной полноте состава. Подсвечиваются «горячие» акторы.',
+        },
+      ];
+
+      let currentStageIndex = 0;
+      let isPlaying = false;
+      let stageTimer = 0;
+      const STAGE_DURATION = 5; // сек на стадию в режиме авто
+
+      // ---------- SVG HUD с пайплайном (общий) ----------
+      function resizeHUD() {
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+        hud.setAttribute('width', w);
+        hud.setAttribute('height', h);
+        hud.setAttribute('viewBox', `0 0 ${w} ${h}`);
+      }
+
+      function createSvgEl(tag, attrs) {
+        const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+        for (const k in attrs) el.setAttribute(k, attrs[k]);
+        return el;
+      }
+
+      resizeHUD();
+
+      const pipelineGroup = createSvgEl('g', { id: 'pipeline-group' });
+      hud.appendChild(pipelineGroup);
+
+      function buildPipelineSVG() {
+        while (pipelineGroup.firstChild) pipelineGroup.removeChild(pipelineGroup.firstChild);
+
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+        const left = 40;
+        const top = Math.max(40, h * 0.12);
+        const width = Math.min(320, w * 0.4);
+        const stageHeight = 44;
+        const height = stages.length * stageHeight + 18;
+
+        const bg = createSvgEl('rect', {
+          x: left - 8,
+          y: top - 12,
+          width: width + 26,
+          height: height + 26,
+          rx: 24,
+          ry: 24,
+          fill: 'rgba(255,255,255,0.94)',
+          stroke: 'rgba(148,163,184,0.8)',
+          'stroke-width': 1.2,
+        });
+        pipelineGroup.appendChild(bg);
+
+        stages.forEach((st, idx) => {
+          const y = top + idx * stageHeight;
+          const g = createSvgEl('g', { 'data-stage-idx': String(idx) });
+
+          const rect = createSvgEl('rect', {
+            x: left + 16,
+            y,
+            width: width - 30,
+            height: stageHeight - 10,
+            rx: 13,
+            ry: 13,
+            fill: 'rgba(248,250,252,0.98)',
+            stroke: 'rgba(191,219,254,1)',
+            'stroke-width': 1.2,
+          });
+
+          const label = createSvgEl('text', {
+            x: left + 34,
+            y: y + stageHeight * 0.6,
+            fill: '#111827',
+            'font-size': 13,
+            'font-weight': 700,
+          });
+          label.textContent = st.svgLabel;
+
+          const tag = createSvgEl('text', {
+            x: left + width - 16,
+            y: y + stageHeight * 0.6,
+            fill: '#4b5563',
+            'font-size': 12,
+            'font-weight': 700,
+            'text-anchor': 'end',
+          });
+          tag.textContent = `G${idx}`;
+
+          g.appendChild(rect);
+          g.appendChild(label);
+          g.appendChild(tag);
+          pipelineGroup.appendChild(g);
+        });
+      }
+
+      function highlightStageInSVG(idx) {
+        const groups = pipelineGroup.querySelectorAll('g[data-stage-idx]');
+        groups.forEach(g => {
+          const rect = g.querySelector('rect');
+          const label = g.querySelector('text');
+          const stageIdx = parseInt(g.getAttribute('data-stage-idx') || '0', 10);
+          if (!rect || !label) return;
+
+          if (stageIdx === idx) {
+            rect.setAttribute('stroke', 'rgba(37,99,235,1)');
+            rect.setAttribute('stroke-width', '1.8');
+            rect.setAttribute('fill', 'rgba(219,234,254,1)');
+            label.setAttribute('fill', '#020617');
+          } else {
+            rect.setAttribute('stroke', 'rgba(191,219,254,1)');
+            rect.setAttribute('stroke-width', '1.2');
+            rect.setAttribute('fill', 'rgba(248,250,252,0.98)');
+            label.setAttribute('fill', '#111827');
+          }
+        });
+      }
+
+      buildPipelineSVG();
+      highlightStageInSVG(currentStageIndex);
+
+      // ---------- Текст и кнопки справа (общие) ----------
+      const stageTitleEl = document.getElementById('stage-title');
+      const stageLabelEl = document.getElementById('stage-label');
+      const stageDescEl = document.getElementById('stage-desc');
+
+      function updateStageText() {
+        const st = stages[currentStageIndex];
+        stageTitleEl.textContent = st.name;
+        stageLabelEl.textContent = st.short;
+        stageDescEl.textContent = st.desc;
+        highlightStageInSVG(currentStageIndex);
+      }
+
+      updateStageText();
+
+      const playBtn = document.getElementById('play-btn');
+      const stepBtn = document.getElementById('step-btn');
+
+      playBtn.addEventListener('click', () => {
+        isPlaying = !isPlaying;
+        playBtn.textContent = isPlaying ? 'Пауза' : 'Запустить пайплайн';
+        if (isPlaying) stageTimer = 0;
+      });
+
+      stepBtn.addEventListener('click', () => {
+        currentStageIndex = (currentStageIndex + 1) % stages.length;
+        updateStageText();
+      });
+
+      function advanceStage(delta) {
+        if (!isPlaying) return;
+        stageTimer += delta;
+        if (stageTimer >= STAGE_DURATION) {
+          stageTimer = 0;
+          currentStageIndex = (currentStageIndex + 1) % stages.length;
+          updateStageText();
+        }
+      }
+
+      // ---------- Выбор режима: Three.js или 2D fallback ----------
+      const hasThree = typeof window.THREE !== 'undefined';
+      if (hasThree) {
+        console.log('Three.js обнаружен — включаем 3D-граф.');
+        initThreeScene();
+      } else {
+        console.warn('Three.js не загружен (CDN / блокировка). Включён 2D fallback на canvas.');
+        initCanvasFallback();
+      }
+
+      // ---------- 3D-сцена на Three.js ----------
+      function initThreeScene() {
+        console.assert(typeof THREE.WebGLRenderer === 'function', 'THREE.WebGLRenderer не найден');
+
+        const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+        renderer.setPixelRatio(window.devicePixelRatio || 1);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setClearColor(0xf3f4f6, 1.0);
+
+        const scene = new THREE.Scene();
+
+        const camera = new THREE.PerspectiveCamera(
+          50,
+          window.innerWidth / window.innerHeight,
+          0.1,
+          200
+        );
+        camera.position.set(0, 6, 18);
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.08;
+
+        const ambient = new THREE.AmbientLight(0xffffff, 0.9);
+        scene.add(ambient);
+        const dir = new THREE.DirectionalLight(0x93c5fd, 1.0);
+        dir.position.set(6, 10, 8);
+        scene.add(dir);
+
+        // GLSL-шейдеры для узлов графа
+        const nodeVertexShader = `
+          uniform float uTime;
+          varying vec3 vPos;
+          varying float vDepth;
+          void main() {
+            vPos = position;
+            vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+            vDepth = -mvPosition.z;
+            gl_Position = projectionMatrix * mvPosition;
+          }
+        `;
+
+        const nodeFragmentShader = `
+          precision highp float;
+          uniform float uTime;
+          uniform vec3 uBaseColor;
+          uniform float uStage;
+          varying vec3 vPos;
+          varying float vDepth;
+
+          float hash(vec3 p) {
+            return fract(sin(dot(p, vec3(12.9898,78.233,37.719))) * 43758.5453);
+          }
+
+          void main() {
+            float h = hash(floor(vPos * 4.0));
+            float flicker = step(0.5, fract(h + uTime * 1.3 + uStage * 0.6));
+            float depthFade = clamp(0.3 + 0.7 * (vDepth / 25.0), 0.3, 1.0);
+            float glow = 0.5 + 0.6 * abs(sin(uTime * 1.1 + dot(vPos, vec3(0.4,0.7,0.3))));
+            vec3 color = uBaseColor * (0.3 + flicker * glow) * depthFade;
+            gl_FragColor = vec4(color, 1.0);
+          }
+        `;
+
+        function createNodeMaterial(baseColor) {
+          return new THREE.ShaderMaterial({
+            uniforms: {
+              uTime: { value: 0 },
+              uBaseColor: { value: new THREE.Color(baseColor) },
+              uStage: { value: 0 },
+            },
+            vertexShader: nodeVertexShader,
+            fragmentShader: nodeFragmentShader,
+          });
+        }
+
+        const graphGroup = new THREE.Group();
+        graphGroup.scale.set(1.6, 1.6, 1.6); // увеличить сам граф
+        scene.add(graphGroup);
+
+        const nodeTypes = [
+          { id: 'actor', color: '#22c55e', label: 'Актор' },
+          { id: 'event', color: '#38bdf8', label: 'Событие' },
+          { id: 'entity', color: '#eab308', label: 'Сущность' },
+          { id: 'concept', color: '#f97316', label: 'Смысл' },
+          { id: 'legal', color: '#f973a1', label: 'Норма' },
+        ];
+
+        const nodeMaterials = {};
+        nodeTypes.forEach(t => { nodeMaterials[t.id] = createNodeMaterial(t.color); });
+
+        const nodes = [];
+        const nodeGeometry = new THREE.SphereGeometry(0.4, 22, 22);
+        const NODE_COUNT = 55;
+
+        const typeCounters = { actor: 1, event: 1, entity: 1, concept: 1, legal: 1 };
+
+        for (let i = 0; i < NODE_COUNT; i++) {
+          const angle = Math.random() * Math.PI * 2;
+          const radius = 3.2 + Math.random() * 3.8;
+          const y = (Math.random() - 0.5) * 5.5;
+          const x = Math.cos(angle) * radius;
+          const z = Math.sin(angle) * radius;
+
+          let type;
+          if (i < 15) type = 'actor';
+          else if (i < 30) type = 'event';
+          else if (i < 40) type = 'entity';
+          else if (i < 50) type = 'concept';
+          else type = 'legal';
+
+          const mesh = new THREE.Mesh(nodeGeometry, nodeMaterials[type]);
+          mesh.position.set(x, y, z);
+          graphGroup.add(mesh);
+
+          const typeMeta = nodeTypes.find(t => t.id === type);
+          const idx = typeCounters[type]++;
+          const labelText = `${typeMeta.label} ${idx}`;
+          const labelEl = document.createElement('div');
+          labelEl.className = 'node-label';
+          labelEl.textContent = labelText;
+          appEl.appendChild(labelEl);
+
+          nodes.push({
+            mesh,
+            type,
+            labelEl,
+            basePos: mesh.position.clone(),
+            floatPhase: Math.random() * Math.PI * 2,
+            floatRadius: 0.22 + Math.random() * 0.28,
+          });
+        }
+
+        const edgeMaterial = new THREE.LineBasicMaterial({
+          color: 0x4b5563, // тёмные связи
+          transparent: true,
+          opacity: 0.95,
+        });
+
+        const edgeGeometry = new THREE.BufferGeometry();
+        const edgePositions = [];
+        const edgeList = []; // пары индексов узлов
+        let edgePosAttr = null;
+
+        function connectNodes() {
+          edgePositions.length = 0;
+          edgeList.length = 0;
+          for (let i = 0; i < nodes.length; i++) {
+            const connections = 3 + Math.floor(Math.random() * 3);
+            for (let c = 0; c < connections; c++) {
+              const j = Math.floor(Math.random() * nodes.length);
+              if (j === i) continue;
+              const a = nodes[i].mesh.position;
+              const b = nodes[j].mesh.position;
+              edgePositions.push(
+                a.x, a.y, a.z,
+                b.x, b.y, b.z
+              );
+              edgeList.push({ aIndex: i, bIndex: j });
+            }
+          }
+          const posAttr = new THREE.Float32BufferAttribute(edgePositions, 3);
+          edgeGeometry.setAttribute('position', posAttr);
+          edgePosAttr = edgeGeometry.getAttribute('position');
+        }
+
+        connectNodes();
+        const edges = new THREE.LineSegments(edgeGeometry, edgeMaterial);
+        graphGroup.add(edges);
+
+        // Частицы-"биты"
+        const BIT_COUNT = 200;
+        const bitPositions = new Float32Array(BIT_COUNT * 3);
+        const bitVelocities = new Float32Array(BIT_COUNT);
+
+        const bitGeometry = new THREE.BufferGeometry();
+        bitGeometry.setAttribute('position', new THREE.BufferAttribute(bitPositions, 3));
+
+        const bitMaterial = new THREE.PointsMaterial({
+          size: 3.0,
+          sizeAttenuation: true,
+          color: 0x0ea5e9,
+          transparent: true,
+          opacity: 0.9,
+        });
+
+        const bits = new THREE.Points(bitGeometry, bitMaterial);
+        scene.add(bits);
+
+        function resetBit(i) {
+          const base = i * 3;
+          bitPositions[base] = -12 - Math.random() * 5.0;
+          bitPositions[base + 1] = (Math.random() - 0.5) * 8.0;
+          bitPositions[base + 2] = (Math.random() - 0.5) * 8.0;
+          bitVelocities[i] = 0.03 + Math.random() * 0.04;
+        }
+
+        for (let i = 0; i < BIT_COUNT; i++) resetBit(i);
+        bitGeometry.attributes.position.needsUpdate = true;
+
+        const clock = new THREE.Clock();
+        const projVector = new THREE.Vector3();
+
+        function updateLabels() {
+          const w = window.innerWidth;
+          const h = window.innerHeight;
+          nodes.forEach(n => {
+            projVector.copy(n.mesh.position).project(camera);
+            const x = (projVector.x * 0.5 + 0.5) * w;
+            const y = (-projVector.y * 0.5 + 0.5) * h;
+            if (projVector.z > 1.0) {
+              n.labelEl.style.display = 'none';
+            } else {
+              n.labelEl.style.display = 'block';
+              n.labelEl.style.left = x + 'px';
+              n.labelEl.style.top = y + 'px';
+            }
+          });
+        }
+
+        function animate() {
+          requestAnimationFrame(animate);
+          const delta = clock.getDelta();
+          const elapsed = clock.elapsedTime;
+
+          advanceStage(delta);
+
+          // Лёгкое "плавание" узлов вокруг базовых позиций
+          nodes.forEach(n => {
+            const t = elapsed;
+            const amp = n.floatRadius;
+            const phase = n.floatPhase;
+            const bp = n.basePos;
+            n.mesh.position.x = bp.x + Math.sin(t * 0.45 + phase) * amp;
+            n.mesh.position.y = bp.y + Math.cos(t * 0.4 + phase * 1.3) * amp;
+            n.mesh.position.z = bp.z + Math.sin(t * 0.35 + phase * 2.1) * amp;
+          });
+
+          // Обновляем рёбра, чтобы тянулись за узлами
+          if (edgePosAttr) {
+            const arr = edgePosAttr.array;
+            let ptr = 0;
+            for (let i = 0; i < edgeList.length; i++) {
+              const e = edgeList[i];
+              const a = nodes[e.aIndex].mesh.position;
+              const b = nodes[e.bIndex].mesh.position;
+              arr[ptr++] = a.x; arr[ptr++] = a.y; arr[ptr++] = a.z;
+              arr[ptr++] = b.x; arr[ptr++] = b.y; arr[ptr++] = b.z;
+            }
+            edgePosAttr.needsUpdate = true;
+          }
+
+          for (const key in nodeMaterials) {
+            nodeMaterials[key].uniforms.uTime.value = elapsed;
+            nodeMaterials[key].uniforms.uStage.value = currentStageIndex;
+          }
+
+          for (let i = 0; i < BIT_COUNT; i++) {
+            const base = i * 3;
+            bitPositions[base] += bitVelocities[i] * (1.0 + currentStageIndex * 0.25);
+            if (bitPositions[base] > 8) resetBit(i);
+          }
+          bitGeometry.attributes.position.needsUpdate = true;
+
+          controls.update();
+          renderer.render(scene, camera);
+          updateLabels();
+        }
+
+        animate();
+
+        window.addEventListener('resize', () => {
+          const w = window.innerWidth;
+          const h = window.innerHeight;
+          renderer.setSize(w, h);
+          camera.aspect = w / h;
+          camera.updateProjectionMatrix();
+          resizeHUD();
+          buildPipelineSVG();
+          highlightStageInSVG(currentStageIndex);
+        });
+      }
+
+      // ---------- 2D fallback на canvas, если Three.js не загрузился ----------
+      function initCanvasFallback() {
+        const ctx = canvas.getContext('2d');
+        console.assert(ctx, '2D контекст canvas не получен');
+        if (!ctx) return;
+
+        function resizeCanvas() {
+          canvas.width = window.innerWidth;
+          canvas.height = window.innerHeight;
+        }
+        resizeCanvas();
+
+        const nodeTypes = [
+          { id: 'actor', color: '#22c55e', label: 'Актор' },
+          { id: 'event', color: '#38bdf8', label: 'Событие' },
+          { id: 'entity', color: '#eab308', label: 'Сущность' },
+          { id: 'concept', color: '#f97316', label: 'Смысл' },
+          { id: 'legal', color: '#f973a1', label: 'Норма' },
+        ];
+
+        const nodes = [];
+        const edges = [];
+        const NODE_COUNT = 40;
+
+        const typeCounters = { actor: 1, event: 1, entity: 1, concept: 1, legal: 1 };
+
+        for (let i = 0; i < NODE_COUNT; i++) {
+          const angle = Math.random() * Math.PI * 2;
+          const radius = 160 + Math.random() * 200;
+          const baseX = Math.cos(angle) * radius;
+          const baseY = Math.sin(angle) * radius;
+
+          let type;
+          if (i < 12) type = 'actor';
+          else if (i < 24) type = 'event';
+          else if (i < 30) type = 'entity';
+          else if (i < 36) type = 'concept';
+          else type = 'legal';
+
+          const meta = nodeTypes.find(t => t.id === type);
+          const idx = typeCounters[type]++;
+          const labelText = `${meta.label} ${idx}`;
+
+          nodes.push({
+            baseX,
+            baseY,
+            x: baseX,
+            y: baseY,
+            type,
+            label: labelText,
+            baseRadius: 11 + Math.random() * 5,
+            phase: Math.random() * Math.PI * 2,
+          });
+        }
+
+        for (let i = 0; i < NODE_COUNT; i++) {
+          const connections = 3 + Math.floor(Math.random() * 3);
+          for (let c = 0; c < connections; c++) {
+            const j = Math.floor(Math.random() * NODE_COUNT);
+            if (j === i) continue;
+            edges.push({ a: i, b: j });
+          }
+        }
+
+        const BIT_COUNT = 150;
+        const bits = new Array(BIT_COUNT);
+
+        function resetBit(i) {
+          const w = canvas.width;
+          const h = canvas.height;
+          bits[i] = {
+            x: -280 - Math.random() * 260,
+            y: h * 0.15 + Math.random() * h * 0.7,
+            v: 60 + Math.random() * 60,
+          };
+        }
+
+        for (let i = 0; i < BIT_COUNT; i++) resetBit(i);
+
+        let lastTime = performance.now();
+
+        function animate(time) {
+          const dt = (time - lastTime) / 1000;
+          lastTime = time;
+
+          advanceStage(dt);
+
+          const w = canvas.width;
+          const h = canvas.height;
+
+          // фон
+          const grad = ctx.createLinearGradient(0, 0, 0, h);
+          grad.addColorStop(0, '#f9fafb');
+          grad.addColorStop(1, '#e5e7eb');
+          ctx.fillStyle = grad;
+          ctx.fillRect(0, 0, w, h);
+
+          ctx.save();
+          ctx.translate(w / 2, h / 2);
+          const t = time * 0.001;
+          const scale = 1.2 + 0.08 * Math.sin(time * 0.00025);
+
+          // обновляем координаты узлов: лёгкое плавание вокруг базовых
+          nodes.forEach(n => {
+            n.x = n.baseX + Math.sin(t * 0.5 + n.phase) * 24;
+            n.y = n.baseY + Math.cos(t * 0.45 + n.phase * 1.4) * 18;
+          });
+
+          // рёбра
+          ctx.globalAlpha = 0.95;
+          ctx.strokeStyle = '#4b5563'; // тёмные и толстые связи
+          ctx.lineWidth = 2.6;
+          edges.forEach(e => {
+            const a = nodes[e.a];
+            const b = nodes[e.b];
+            ctx.beginPath();
+            ctx.moveTo(a.x * scale, a.y * scale);
+            ctx.lineTo(b.x * scale, b.y * scale);
+            ctx.stroke();
+          });
+
+          // вершины
+          nodes.forEach(n => {
+            const tMeta = nodeTypes.find(t => t.id === n.type);
+            const baseColor = tMeta ? tMeta.color : '#6366f1';
+            ctx.fillStyle = baseColor;
+            const pulse = 1 + 0.35 * Math.sin(time * 0.002 + n.phase + currentStageIndex * 0.6);
+            const r = n.baseRadius * pulse;
+            ctx.beginPath();
+            ctx.arc(n.x * scale, n.y * scale, r, 0, Math.PI * 2);
+            ctx.fill();
+          });
+
+          // подписи узлов
+          ctx.globalAlpha = 1.0;
+          ctx.fillStyle = '#111827';
+          ctx.font = 'bold 13px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI"';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'top';
+          nodes.forEach(n => {
+            const sx = n.x * scale;
+            const sy = n.y * scale + n.baseRadius + 8;
+            ctx.fillText(n.label, sx, sy);
+          });
+
+          ctx.restore();
+
+          // частицы-биты поверх
+          ctx.globalAlpha = 0.95;
+          ctx.fillStyle = '#0ea5e9';
+          for (let i = 0; i < BIT_COUNT; i++) {
+            const b = bits[i];
+            b.x += b.v * dt * (1 + 0.25 * currentStageIndex);
+            if (b.x > w + 140) resetBit(i);
+            ctx.fillRect(b.x, b.y, 5, 3);
+          }
+
+          requestAnimationFrame(animate);
+        }
+
+        requestAnimationFrame(animate);
+
+        window.addEventListener('resize', () => {
+          resizeCanvas();
+          resizeHUD();
+          buildPipelineSVG();
+          highlightStageInSVG(currentStageIndex);
+        });
+      }
+    });
+  </script>
+</body>
+</html>
