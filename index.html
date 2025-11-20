@@ -1,4 +1,3 @@
-
 <!doctype html>
 <html lang="ru">
 <head>
@@ -43,6 +42,9 @@
     .reticle-dom::before{width:2px;height:110%;}
     .reticle-dom::after{height:2px;width:110%;}
     .reticle-dom.active{opacity:1;}
+
+    .reticle-article{position:absolute;font-family:'Press Start 2P',system-ui,monospace;font-size:10px;letter-spacing:0.09em;color:var(--red);text-shadow:0 0 10px rgba(248,113,113,0.9);white-space:nowrap;pointer-events:none;transform:translate(-50%,-50%);opacity:0;transition:opacity .18s;padding:6px 14px;border-radius:7px;background:radial-gradient(circle at 25% 20%, rgb(0 21 31 / 87%), rgba(2, 6, 23, 0.98));border:1px solid rgba(56,189,248,0.85);box-shadow:0 0 14px rgba(15,23,42,0.95);}
+    .reticle-article.active{opacity:1;}
 
     @media (max-width:1000px){.frame{border-radius:24px}.center-panel{inset:12% 13%}}
   </style>
@@ -95,6 +97,21 @@
 
 <script type="module">
 import * as THREE from 'https://unpkg.com/three@0.161.0/build/three.module.min.js';
+
+// Массив статей УК РФ, релевантных терроризму, диверсиям, экстремизму и информационным атакам
+const ukArticles = [
+  "СТ 205 УК РФ",
+  "СТ 205.1 УК РФ",
+  "СТ 205.2 УК РФ",
+  "СТ 205.3 УК РФ",
+  "СТ 205.4 УК РФ",
+  "СТ 207.3 УК РФ",
+  "СТ 275 УК РФ",
+  "СТ 280 УК РФ",
+  "СТ 280.1 УК РФ",
+  "СТ 281 УК РФ",
+  "СТ 282 УК РФ"
+];
 
 // Основная сцена
 const canvas = document.getElementById('gl');
@@ -200,10 +217,19 @@ const bgMesh = new THREE.Mesh(bgPlane, bgMat); bgMesh.position.set(0,0, -0.05); 
 /* --------- Graph nodes & edges (red) --------- */
 const nodes = []; const nodeCount = 26;
 const nodeGeo = new THREE.SphereGeometry(0.11, 14, 14);
+// Диапазоны и минимальная дистанция между нодами, чтобы граф был растянут и неслипанным
+const NODE_X_MIN = -4.5, NODE_X_MAX = 4.5;
+const NODE_Y_MIN = -2.9, NODE_Y_MAX = 2.9;
+const NODE_MIN_DIST = 0.9;
 for(let i=0;i<nodeCount;i++){
-  const x = THREE.MathUtils.lerp(-4.6, 4.6, Math.random());
-  const y = THREE.MathUtils.lerp(-2.7, 2.7, Math.random());
-  const base = new THREE.Vector3(x, y, 0.02);
+  let base;
+  let attempts = 0;
+  do {
+    const x = THREE.MathUtils.lerp(NODE_X_MIN, NODE_X_MAX, Math.random());
+    const y = THREE.MathUtils.lerp(NODE_Y_MIN, NODE_Y_MAX, Math.random());
+    base = new THREE.Vector3(x, y, 0.02);
+    attempts++;
+  } while (attempts < 80 && nodes.some(n => n.base.distanceTo(base) < NODE_MIN_DIST));
   const m = new THREE.Mesh(
     nodeGeo,
     new THREE.MeshStandardMaterial({
@@ -254,7 +280,7 @@ function makeReticle(){
   const vert = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,-0.8,0.01),new THREE.Vector3(0,0.8,0.01)]), new THREE.LineBasicMaterial({color:0xff4b4b, transparent:true, opacity:1, depthTest:false, depthWrite:false})); g.add(vert);
   const dot = new THREE.Mesh(new THREE.CircleGeometry(0.12,24), new THREE.MeshBasicMaterial({color:0xff4b4b, transparent:true, opacity:1, depthTest:false, depthWrite:false})); dot.position.z=0.02; g.add(dot);
   g.visible=false;
-  g.userData = { t:0, phase:'idle', anchorNode:null, spawn:0, sliding:null, targetEl:null };
+  g.userData = { t:0, phase:'idle', anchorNode:null, spawn:0, sliding:null, targetEl:null, domEl:null, articleEl:null, articleCode:null, articleAssigned:false };
   return g;
 }
 const reticles = [makeReticle(), makeReticle()];
@@ -268,7 +294,13 @@ const domReticles = reticles.map(() => {
   reticleLayer.appendChild(el);
   return el;
 });
-reticles.forEach((r,i)=>{ r.userData.domEl = domReticles[i]; });
+const domArticles = reticles.map(() => {
+  const el = document.createElement('div');
+  el.className = 'reticle-article';
+  reticleLayer.appendChild(el);
+  return el;
+});
+reticles.forEach((r,i)=>{ r.userData.domEl = domReticles[i]; r.userData.articleEl = domArticles[i]; });
 
 /* --------- hologram icon texture helper (CanvasTexture) --------- */
 function makeIconTexture(mode){
@@ -314,7 +346,6 @@ function getBitTexture(bit, isCyan){
 
   const baseColor = isCyan ? '34,211,238' : '255,75,75';
 
-  const grad = ctx.createRadialGradient(size/2,size/2,4,size/2,size/2,size/2.1);
   ctx.fillStyle = `rgba(${baseColor},0.08)`;
   ctx.beginPath();
   ctx.arc(size/2,size/2,size/2.05,0,Math.PI*2);
@@ -486,7 +517,8 @@ runSelfTests();
 let last = performance.now();
 function animate(){
   const now = performance.now(); const dt = (now-last)/1000; last=now;
-  bgUniforms.uTime.value = now/1000; bgUniforms.uAspect.value = (document.querySelector('.center-panel').clientWidth/document.querySelector('.center-panel').clientHeight) || 1;
+  const panelEl = document.querySelector('.center-panel');
+  bgUniforms.uTime.value = now/1000; bgUniforms.uAspect.value = (panelEl.clientWidth/panelEl.clientHeight) || 1;
 
   // holograms behaviour
   for(let i=holograms.length-1;i>=0;i--){
@@ -578,11 +610,11 @@ function animate(){
     const finalScale = baseScale * heatScale * pulse;
     n.mesh.scale.set(finalScale,finalScale,finalScale);
 
-    // лёгкое "дыхание" позиции без рывков: амплитуда почти не зависит от нагрева
-    const ampBase = 0.06;
-    const amp = ampBase + n.visualHeat*0.12;
-    const offsetX = Math.sin(time*1.0 + n.floatPhaseX) * amp;
-    const offsetY = Math.cos(time*0.85 + n.floatPhaseY) * amp;
+    // плавное "дыхание" позиции
+    const ampBase = 0.12;
+    const amp = ampBase + n.visualHeat*0.22;
+    const offsetX = Math.sin(time*1.35 + n.floatPhaseX) * amp;
+    const offsetY = Math.cos(time*1.1 + n.floatPhaseY) * amp;
     n.mesh.position.set(
       n.base.x + offsetX,
       n.base.y + offsetY,
@@ -608,9 +640,7 @@ function animate(){
   }
   edgeGeo.attributes.position.needsUpdate = true;
 
-
-
-  // reticles: многофазная механика — захват узла → полёт → фиксация → затухание
+  // reticles: захват узла → полёт → фиксация → затухание
   for (const r of reticles) {
     const ud = r.userData;
 
@@ -626,6 +656,9 @@ function animate(){
       if (ud.domEl) {
         ud.domEl.classList.remove('active');
       }
+      if (ud.articleEl) {
+        ud.articleEl.classList.remove('active');
+      }
 
       if (ud.fade <= 0) {
         r.visible = false;
@@ -636,32 +669,63 @@ function animate(){
           ud.targetEl.classList.remove('hit');
           ud.targetEl = null;
         }
+        if (ud.articleEl) {
+          ud.articleEl.textContent = '';
+        }
+        ud.articleCode = null;
+        ud.articleAssigned = false;
       }
       continue;
     }
 
     // Фаза фиксации на подозреваемом — мишень "прилипла" к карточке
     if (ud.phase === 'pinned' && ud.targetEl) {
+      const rect = ud.targetEl.getBoundingClientRect();
+      const frameRect = frameEl.getBoundingClientRect();
+      const cx = rect.left + rect.width/2 - frameRect.left;
+      const cy = rect.top + rect.height/2 - frameRect.top;
+
+      // позиция крестика строго по центру карточки
       const dom = ud.domEl;
       if (dom) {
-        const rect = ud.targetEl.getBoundingClientRect();
-        const frameRect = frameEl.getBoundingClientRect();
-        const cx = rect.left + rect.width/2 - frameRect.left;
-        const cy = rect.top + rect.height/2 - frameRect.top;
         dom.style.left = cx + 'px';
         dom.style.top = cy + 'px';
         dom.classList.add('active');
       }
+
+      // если в ту же карточку прилетело две мишени — статьи складываются "стопкой"
+      const art = ud.articleEl;
+      if (art && ud.articleCode) {
+        let rank = 0;
+        for (const rr of reticles) {
+          const u2 = rr.userData;
+          if (u2 === ud) break;
+          if (u2.phase === 'pinned' && u2.targetEl === ud.targetEl) rank++;
+        }
+        const baseOffset = 70; // базовый отступ ПОД центром иконки
+        const perLine = 26;    // расстояние между статьями
+        art.style.left = cx + 'px';
+        art.style.top = (cy + baseOffset + rank*perLine) + 'px';
+        art.classList.add('active');
+      }
+
       r.visible = false;
       continue;
     }
 
-    if (!r.visible) continue;
+    if (!r.visible && ud.phase === 'idle') {
+      if (ud.domEl) ud.domEl.classList.remove('active');
+      if (ud.articleEl) ud.articleEl.classList.remove('active');
+      continue;
+    }
 
     // Фаза полёта к подозреваемому
     if (ud.phase === 'travel' && ud.sliding) {
       if (ud.domEl) {
         ud.domEl.classList.remove('active');
+      }
+      if (ud.articleEl) {
+        ud.articleEl.classList.remove('active');
       }
       r.visible = true;
       const sld = ud.sliding;
@@ -681,7 +745,12 @@ function animate(){
         ud.sliding = null;
         ud.t = 0;
         const el = ud.targetEl;
-        pulseTarget(el)
+        pulseTarget(el);
+        if (!ud.articleAssigned && ud.articleEl) {
+          ud.articleCode = ukArticles[Math.floor(Math.random()*ukArticles.length)];
+          ud.articleEl.textContent = ud.articleCode;
+          ud.articleAssigned = true;
+        }
       }
       continue;
     }
@@ -690,6 +759,9 @@ function animate(){
     if (ud.phase === 'lock' && ud.anchorNode) {
       if (ud.domEl) {
         ud.domEl.classList.remove('active');
+      }
+      if (ud.articleEl) {
+        ud.articleEl.classList.remove('active');
       }
       r.visible = true;
       const p = ud.anchorNode.mesh.position;
